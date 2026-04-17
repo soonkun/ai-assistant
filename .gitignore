@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Models (절대 커밋 금지)
+*.gguf
+*.safetensors
+*.onnx
+assets/models/
+
+# Upstream은 참고용 — clone되지만 git에는 안 올림
+upstream/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Local data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Claude Code 로컬 설정 (팀 공유 안 함)
+.claude/settings.local.json
+
+# Node (향후 UI 빌드 시)
+node_modules/
+dist-ui/
+
+# Environment
+.env
+.env.local
