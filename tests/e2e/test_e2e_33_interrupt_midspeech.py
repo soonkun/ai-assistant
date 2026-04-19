@@ -44,7 +44,7 @@ async def test_e2e_33_interrupt_midspeech() -> None:
     batch1 = BatchInput(texts=[TextData(source=TextSource.INPUT, content="긴 답변 부탁해")])
     chunks_before_interrupt: list[str] = []
 
-    chat_iter = await fake_agent.chat(batch1)
+    chat_iter = fake_agent.chat(batch1)
 
     # 몇 개 청크 수신 후 인터럽트
     chunk_count = 0
@@ -66,7 +66,7 @@ async def test_e2e_33_interrupt_midspeech() -> None:
     # 수락 기준 2: 인터럽트 후 새 chat() 시작 → 정상 응답
     batch2 = BatchInput(texts=[TextData(source=TextSource.INPUT, content="다시 짧게 답해줘")])
     second_chunks: list[str] = []
-    async for event in await fake_agent.chat(batch2):
+    async for event in fake_agent.chat(batch2):
         from agent.events import TextChunk
 
         if isinstance(event, TextChunk):

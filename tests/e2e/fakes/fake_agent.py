@@ -50,8 +50,8 @@ class FakeAgent:
     def interrupt_count(self) -> int:
         return self._interrupt_count
 
-    async def chat(self, batch: Any) -> "AsyncIterator[AgentEvent]":
-        """GemmaChatAgent.chat 시그니처 호환."""
+    async def chat(self, batch: Any) -> AsyncIterator[AgentEvent]:
+        """GemmaChatAgent.chat 시그니처 호환 — async generator (yield 직접)."""
         self._call_count += 1
         self._interrupted = False
         self._last_batch = batch
@@ -61,12 +61,7 @@ class FakeAgent:
         else:
             response = f"FakeAgent: 응답 없음 (call #{self._call_count})"
 
-        return self._stream_response(response)
-
-    async def _stream_response(self, response: list[AgentEvent] | str) -> AsyncIterator[AgentEvent]:
-        """응답을 AsyncIterator[AgentEvent]로 변환해 방출."""
         if isinstance(response, str):
-            # 문자열 → TextChunk + EndOfTurn
             if response:
                 yield TextChunk(text=response)
             yield EndOfTurn(assistant_text_total=response)

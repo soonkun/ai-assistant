@@ -109,6 +109,10 @@ def app_config(tmp_data_dir: Path) -> Any:
     from app.config import AppConfig, OllamaConfig, PathsConfig
 
     ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    # E2E 테스트는 메모리 여유를 위해 e2b를 기본으로 사용 (WSL+Ollama 동시 구동 안정성).
+    # REQUIREMENTS §8은 e4b 확정이며 프로덕션 기본값은 src/app/config.py에 그대로 유지된다.
+    # OLLAMA_MODEL=gemma4:e4b 로 override 가능.
+    ollama_model = os.environ.get("OLLAMA_MODEL", "gemma4:e2b")
     return AppConfig(
         paths=PathsConfig(
             data_dir=str(tmp_data_dir),
@@ -118,7 +122,7 @@ def app_config(tmp_data_dir: Path) -> Any:
             log_dir=str(tmp_data_dir / "logs"),
             assets_dir="assets",
         ),
-        ollama=OllamaConfig(base_url=ollama_url),
+        ollama=OllamaConfig(base_url=ollama_url, model=ollama_model),
         morning_briefing_time="09:00",
         dnd_enabled=False,
     )

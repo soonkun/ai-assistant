@@ -14,6 +14,7 @@ REQUIREMENTS: §4.1 일정 등록 (function calling)
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,15 @@ async def test_e2e_03_tool_call_calendar(
     """
     if not ollama_available:
         pytest.skip(reason="Q-2: Ollama 미기동 → e2e_model 자동 skip")
+
+    # Gemma FC는 e4b 확정(REQUIREMENTS §8). e2b 등 경량 모델은 한국어 tool calling
+    # 정확도가 낮아 빈 응답을 반환하므로 본 시나리오에서 skip한다.
+    model = os.environ.get("OLLAMA_MODEL", "gemma4:e2b")
+    if model != "gemma4:e4b":
+        pytest.skip(
+            reason=f"E2E-03은 gemma4:e4b 전용 (현재 OLLAMA_MODEL={model!r}). "
+            "메모리 제약으로 e4b 사용 불가 시 본 시나리오는 실행 불가."
+        )
 
     # FakeClock: 2026-04-20 09:00 KST (참조용 — 현재는 system_prompt에 직접 기재)
     from agent.builder import build_chat_agent
@@ -80,7 +90,7 @@ async def test_e2e_03_tool_call_calendar(
     )
 
     tool_call_events: list[Any] = []
-    async for event in await gemma_agent.chat(batch):
+    async for event in gemma_agent.chat(batch):
         from agent.events import ToolCallStart
 
         if isinstance(event, ToolCallStart) and event.name == "add_event":

@@ -15,6 +15,7 @@ Q-4 옵션 A: docs/specs/ MD 파일 기반 RAG 시드.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -42,6 +43,11 @@ async def test_e2e_04_tool_call_search(
     """
     if not ollama_available:
         pytest.skip(reason="Q-2: Ollama 미기동 → e2e_model 자동 skip")
+
+    # Gemma FC는 e4b 확정 (REQUIREMENTS §8). 경량 모델은 한국어 tool calling 정확도 미달.
+    model = os.environ.get("OLLAMA_MODEL", "gemma4:e2b")
+    if model != "gemma4:e4b":
+        pytest.skip(reason=f"E2E-04는 gemma4:e4b 전용 (현재 OLLAMA_MODEL={model!r}).")
 
     if not _BGE_MODEL_PATH.exists():
         pytest.skip(reason=f"BGE-M3 모델 없음: {_BGE_MODEL_PATH} — e2e_model skip")
@@ -125,7 +131,7 @@ async def test_e2e_04_tool_call_search(
     search_call_events: list[Any] = []
     text_parts: list[str] = []
 
-    async for event in await gemma_agent.chat(batch):
+    async for event in gemma_agent.chat(batch):
         from agent.events import ToolCallStart, TextChunk
 
         if isinstance(event, ToolCallStart) and event.name == "search_docs":

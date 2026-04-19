@@ -65,7 +65,7 @@ async def test_e2e_01_chat_happy_fake_agent(
     batch = BatchInput(texts=[TextData(source=TextSource.INPUT, content=user_input)])
 
     full_text_parts: list[str] = []
-    async for event in await fake_agent.chat(batch):
+    async for event in fake_agent.chat(batch):
         if isinstance(event, TextChunk):
             full_text_parts.append(event.text)
 
