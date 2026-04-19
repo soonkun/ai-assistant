@@ -9,6 +9,8 @@ from loguru import logger
 
 from open_llm_vtuber.service_context import ServiceContext  # upstream
 
+from avatar_state import AvatarState
+
 if TYPE_CHECKING:
     from .config import AppConfig
 
@@ -17,7 +19,6 @@ if TYPE_CHECKING:
     from typing import Any as RagService
     from typing import Any as CalendarService
     from typing import Any as IdleMonitor
-    from typing import Any as AvatarState
     from typing import Any as ProactiveDispatcher
     from tool_router import ScreenshotService, ToolRouter, ToolRouterAdapter
 
@@ -38,7 +39,7 @@ class AppServiceContext(ServiceContext):  # type: ignore[misc]
         # M_10 완료 후 주입
         self.idle_monitor: "IdleMonitor | None" = None
         # M_08 완료 후 주입
-        self.avatar_state: "AvatarState | None" = None
+        self.avatar_state: AvatarState | None = None
         # M_11 완료 후 주입
         self.proactive_dispatcher: "ProactiveDispatcher | None" = None
         # M_05b 완료 후 주입 (CR-05에서 타입 확정)
@@ -211,6 +212,10 @@ class AppServiceContext(ServiceContext):  # type: ignore[misc]
         except Exception as exc:
             logger.warning(f"calendar_service 초기화 실패: {exc}")
             self.calendar_service = None
+
+        # M-08: AvatarState 배선 (스펙 §13.1 — load_app_services 내 1줄 추가)
+        self.avatar_state = AvatarState(default="neutral")
+        logger.info("AvatarState 초기화 완료 (default=neutral).")
 
         # CR-05: ScreenshotService 조립
         # send_text 콜백은 per-client이므로 여기서는 None (ws_handler가 직접 전달).

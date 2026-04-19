@@ -281,27 +281,37 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 ### M_08 AvatarState (스프라이트 스왑 백엔드)
 
 - **분류**: NEW (+ 부분 REUSE: upstream `Live2dModel.extract_emotion` 함수 로직만 이식)
-- **상태**: 🔲 TODO
+- **상태**: ✅ DONE (Critic PASS R3, 2026-04-19; R1/R2 FAIL 이력은 reviews/M_08_*_REVIEW{,_R2,_R3}.md 참조)
 - **목적**: LLM 출력에서 `[emotion:happy]` 태그를 추출하고 현재 스프라이트 상태를 프론트에 송신.
 - **공개 API**
   ```python
-  Emotion = Literal["neutral","happy","surprised","sad","worried","thinking","sleepy"]
+  Emotion = Literal["neutral","happy","surprised","sad","worried","thinking","sleepy","study"]
+  # study 포함 8종. LLM 발화 파싱은 7종(_SPOKEN_EMOTIONS, study 제외).
 
-  @dataclass
+  @dataclass(frozen=True, slots=True)
   class AvatarEvent:
       emotion: Emotion
-      crossfade_ms: int  # 200~300
-      speaking: bool     # 립싱크 opacity 펄스 토글
+      crossfade_ms: int = 250  # 200~300, 범위 밖 ValueError (clamp 금지)
+      speaking: bool = False   # 립싱크 opacity 펄스 토글
+
+  SendTextCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
   class AvatarState:
       def __init__(self, default: Emotion = "neutral") -> None: ...
       def extract_emotion(self, text: str) -> tuple[str, Emotion | None]: ...
           # 반환: (태그 제거된 텍스트, 추출된 감정)
-      async def push_event(self, event: AvatarEvent, send_text: Callable) -> None: ...
+          # 미지/비발화 키(study 포함) → "neutral" 폴백 + logger.warning
+      async def push_event(self, event: AvatarEvent, send_text: SendTextCallback) -> None: ...
+      @property
+      def current_emotion(self) -> Emotion: ...
+      @property
+      def is_speaking(self) -> bool: ...
+      def make_event(self, emotion: Emotion, *, crossfade_ms: int = 250, speaking: bool = False) -> AvatarEvent: ...
   ```
 - **에러**: 알 수 없는 감정 태그 → `neutral`로 폴백 + 로그 경고.
-- **의존**: upstream 감정 태그 파싱 로직(참고용).
+- **의존**: 표준 라이브러리(re, dataclasses, asyncio) + loguru. 새 외부 의존성 없음.
 - **비고**: 실제 PNG 렌더는 프론트엔드(M_12) 담당. 백엔드는 상태 이벤트만 송신.
+  §16 참조: Emotion 8종(study 추가), SendTextCallback dict 컨벤션, current_emotion/is_speaking/make_event 신설.
 
 ### M_09 CalendarService (SQLite 일정 CRUD)
 
@@ -421,7 +431,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 | M_05b | ToolRouter | NEW | ✅ DONE | M_06, M_07, M_09 |
 | M_06 | DocumentIngest | NEW | 🔲 HOLD | M_07 |
 | M_07 | VectorSearch | NEW | ✅ DONE | — |
-| M_08 | AvatarState | NEW | 🔲 TODO | M_01 |
+| M_08 | AvatarState | NEW | ✅ DONE | M_01 |
 | M_09 | CalendarService | NEW | ✅ DONE | specs/M_09_CalendarService_SPEC.md |
 | M_10 | IdleMonitor | NEW | 🔲 TODO | — |
 | M_11 | ProactiveDispatcher | NEW | 🔲 TODO | M_09, M_10 |

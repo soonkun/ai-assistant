@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from avatar_state import AvatarState
 from app.config import AppConfig
 from app.service_context import AppServiceContext
 
@@ -254,6 +255,47 @@ class TestM09CalendarServiceWiring:
         # CalendarService 생성자가 calendar_db_path 인자로 호출됨
         mock_calendar_cls.assert_called_once_with(app_cfg.paths.calendar_db_path)
         assert ctx.calendar_service is mock_calendar_instance
+
+
+class TestM08AvatarStateWiring:
+    """M-08: AvatarState 주입 회귀 테스트."""
+
+    @pytest.mark.asyncio
+    async def test_avatar_state_none_before_load_app_services(self) -> None:
+        """__init__ 직후 avatar_state는 None (load_app_services 호출 전 상태)."""
+        ctx = _make_ctx_raw()
+        assert ctx.avatar_state is None
+
+    @pytest.mark.asyncio
+    async def test_avatar_state_injected_on_load_app_services(self) -> None:
+        """load_app_services 후 avatar_state는 AvatarState 인스턴스이며 current_emotion=="neutral".
+
+        스펙 §11.2 DoD, §13.1, §13.3 — AppServiceContext.avatar_state 주입 경로 검증.
+        """
+        import sys
+
+        ctx = _make_ctx_raw()
+        app_cfg = AppConfig()  # type: ignore[call-arg]
+
+        mock_tool_module = MagicMock()
+
+        class _FakeSSInitError(Exception):
+            pass
+
+        mock_tool_module.ScreenshotService = MagicMock(side_effect=_FakeSSInitError("비-Windows"))
+        mock_tool_module.ScreenshotInitError = _FakeSSInitError
+        mock_tool_module.ToolRouter = MagicMock()
+        mock_tool_module.ToolRouterAdapter = MagicMock()
+
+        with patch.dict(sys.modules, {"tool_router": mock_tool_module}):
+            await ctx.load_app_services(app_cfg)
+
+        assert isinstance(ctx.avatar_state, AvatarState), (
+            f"avatar_state가 AvatarState 인스턴스가 아님: {ctx.avatar_state!r}"
+        )
+        assert ctx.avatar_state.current_emotion == "neutral", (
+            f"초기 emotion이 'neutral'이 아님: {ctx.avatar_state.current_emotion!r}"
+        )
 
 
 class TestCR05ToolRouterAssembly:
