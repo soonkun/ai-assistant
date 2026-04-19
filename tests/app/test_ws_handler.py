@@ -467,6 +467,120 @@ class TestBinaryFrame:
                 assert "message" in response, "error 응답에 'message' 필드가 없음"
 
 
+class TestActiveWsLifecycle:
+    """M5: _active_ws 라이프사이클 테스트 (B1/B2 검증)."""
+
+    def _make_handler_with_real_ctx(self) -> tuple[AppWebSocketHandler, MagicMock]:
+        """_active_ws 필드가 있는 실제 ctx를 주입한 핸들러 생성."""
+        ctx = MagicMock()
+        ctx._active_ws = None
+        ctx.screenshot_service = None
+        ctx.app_config = AppConfig()  # type: ignore[call-arg]
+        ctx.config = MagicMock()
+        ctx.system_config = MagicMock()
+        ctx.character_config = MagicMock()
+        ctx.live2d_model = MagicMock()
+        ctx.live2d_model.model_info = {}
+
+        with patch(
+            "open_llm_vtuber.websocket_handler.WebSocketHandler.__init__",
+            return_value=None,
+        ):
+            handler = AppWebSocketHandler.__new__(AppWebSocketHandler)
+
+        handler.default_context_cache = ctx
+        handler._app_ctx = ctx
+        handler.client_connections = {}
+        handler.client_contexts = {}
+        handler.chat_group_manager = MagicMock()
+        handler.current_conversation_tasks = {}
+        handler.received_data_buffers = {}
+        handler._continuous_tasks = {}
+        handler._tasks_lock = asyncio.Lock()
+        handler._message_handlers = handler._init_message_handlers()
+        return handler, ctx
+
+    @pytest.mark.asyncio
+    async def test_m5a_active_ws_set_on_successful_connection(self) -> None:
+        """M5-a: handle_new_connection 성공 → _active_ws가 해당 WS로 설정됨 (B1 검증)."""
+        handler, ctx = self._make_handler_with_real_ctx()
+        ws = _make_websocket()
+
+        assert ctx._active_ws is None
+
+        with patch.object(WebSocketHandler, "handle_new_connection", new_callable=AsyncMock):
+            await handler.handle_new_connection(ws, "uid1")
+
+        assert ctx._active_ws is ws
+
+    @pytest.mark.asyncio
+    async def test_m5b_active_ws_not_updated_on_super_exception(self) -> None:
+        """M5-b: super().handle_new_connection이 예외 → _active_ws 갱신 안 됨 (B1 검증).
+
+        super() 이전에 _active_ws를 갱신하면 실패한 WS가 남는 버그를 방지한다.
+        """
+        handler, ctx = self._make_handler_with_real_ctx()
+        ws = _make_websocket()
+
+        assert ctx._active_ws is None
+
+        with patch.object(
+            WebSocketHandler,
+            "handle_new_connection",
+            side_effect=RuntimeError("connection init failed"),
+        ):
+            with pytest.raises(RuntimeError, match="connection init failed"):
+                await handler.handle_new_connection(ws, "uid1")
+
+        # super()가 예외를 던졌으므로 _active_ws는 None 유지
+        assert ctx._active_ws is None
+
+    @pytest.mark.asyncio
+    async def test_m5c_active_ws_none_after_disconnect(self) -> None:
+        """M5-c: handle_disconnect 후 _active_ws = None (B2 검증)."""
+        handler, ctx = self._make_handler_with_real_ctx()
+        ws = _make_websocket()
+
+        # 연결 후 _active_ws 설정
+        handler.client_connections["uid1"] = ws
+        ctx._active_ws = ws
+
+        with patch.object(WebSocketHandler, "handle_disconnect", new_callable=AsyncMock):
+            await handler.handle_disconnect("uid1")
+
+        assert ctx._active_ws is None
+
+    @pytest.mark.asyncio
+    async def test_m5d_second_client_disconnect_preserves_active_ws(self) -> None:
+        """M5-d: 두 클라이언트 — 두 번째 연결 후 첫 번째 disconnect → _active_ws 유지 (is 비교 검증).
+
+        _active_ws가 두 번째 WS를 가리키는 상황에서
+        첫 번째 WS disconnect → _active_ws는 두 번째 WS 그대로여야 함.
+        """
+        handler, ctx = self._make_handler_with_real_ctx()
+        ws1 = _make_websocket()
+        ws2 = _make_websocket()
+
+        # ws1 연결
+        with patch.object(WebSocketHandler, "handle_new_connection", new_callable=AsyncMock):
+            await handler.handle_new_connection(ws1, "uid1")
+        assert ctx._active_ws is ws1
+
+        # ws2 연결 (덮어씀)
+        with patch.object(WebSocketHandler, "handle_new_connection", new_callable=AsyncMock):
+            await handler.handle_new_connection(ws2, "uid2")
+        assert ctx._active_ws is ws2
+
+        # ws1 disconnect — _active_ws는 ws2이므로 리셋 안 됨 (is 비교)
+        handler.client_connections["uid1"] = ws1
+        with patch.object(WebSocketHandler, "handle_disconnect", new_callable=AsyncMock):
+            await handler.handle_disconnect("uid1")
+
+        assert ctx._active_ws is ws2, (
+            "_active_ws가 ws1 disconnect 후 None으로 리셋됨. is 비교가 작동하지 않음."
+        )
+
+
 class TestContinuousLoopFailure:
     """연속 캡처 루프 3회 실패 테스트."""
 

@@ -44,6 +44,8 @@ class AppWebSocketHandler(WebSocketHandler):  # type: ignore[misc]
         super().__init__(default_context_cache)
         self._continuous_tasks: dict[str, ContinuousCaptureTask] = {}
         self._tasks_lock: asyncio.Lock = asyncio.Lock()
+        # D-13: AppServiceContext._active_ws를 추적하기 위한 참조 보관
+        self._app_ctx: AppServiceContext = default_context_cache
 
     def _init_message_handlers(self) -> dict[str, Any]:
         handlers = super()._init_message_handlers()
@@ -56,14 +58,38 @@ class AppWebSocketHandler(WebSocketHandler):  # type: ignore[misc]
         )
         return handlers  # type: ignore[no-any-return]
 
+    async def handle_new_connection(self, websocket: WebSocket, client_uid: str) -> None:  # type: ignore[override]
+        """신규 연결 시 D-13: 가장 최근 연결된 WS를 _active_ws에 기록.
+
+        B1: super() 성공 후에만 _active_ws 갱신. super()가 예외를 던지면
+        _active_ws는 이전 상태(None 또는 이전 WS)를 유지한다.
+        upstream _cleanup_failed_connection은 client_connections dict만 비우고
+        _active_ws는 건드리지 않으므로 본 오버라이드가 직접 관리해야 한다.
+        """
+        await super().handle_new_connection(websocket, client_uid)
+        # super() 성공(예외 없이 반환)한 경우에만 여기 도달
+        self._app_ctx._active_ws = websocket
+        logger.debug(f"D-13: _active_ws 갱신 client={client_uid}")
+
     async def handle_disconnect(self, client_uid: str) -> None:
         """연결 끊김 시 연속 캡처 태스크 정리 후 upstream 처리.
 
         MAJOR-3: _cancel_continuous_task 호출 전 락을 보유해 경쟁 조건 방지.
+        B2: _active_ws가 끊기는 WS를 가리키고 있으면 None으로 리셋.
+            식별자 비교(is)를 사용해 다중 클라이언트 상황에서도 안전.
         """
+        # disconnect 대상 WS를 미리 확보 (super() 호출 전 client_connections에서 읽기)
+        disconnecting_ws = getattr(self, "client_connections", {}).get(client_uid)
+
         async with self._tasks_lock:
             await self._cancel_continuous_task(client_uid)
-        await super().handle_disconnect(client_uid)
+        try:
+            await super().handle_disconnect(client_uid)
+        finally:
+            # B2: 식별자 비교로 안전하게 리셋
+            if disconnecting_ws is not None and self._app_ctx._active_ws is disconnecting_ws:
+                self._app_ctx._active_ws = None
+                logger.debug(f"D-13: _active_ws None 리셋 client={client_uid}")
 
     # ------------------------------------------------------------------ #
     #  신규 핸들러                                                          #

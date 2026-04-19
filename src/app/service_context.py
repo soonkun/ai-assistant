@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
+from fastapi import WebSocket
 from loguru import logger
 
 from open_llm_vtuber.service_context import ServiceContext  # upstream
@@ -19,7 +22,7 @@ if TYPE_CHECKING:
     # 각 모듈 구현 완료 후 실제 타입으로 교체할 것.
     from typing import Any as RagService
     from typing import Any as CalendarService
-    from typing import Any as ProactiveDispatcher
+    from proactive import ProactiveDispatcher
     from tool_router import ScreenshotService, ToolRouter, ToolRouterAdapter
 
 
@@ -49,6 +52,26 @@ class AppServiceContext(ServiceContext):  # type: ignore[misc]
         self.tool_router_adapter: "ToolRouterAdapter | None" = None
         # load_full_config 후 주입
         self.app_config: "AppConfig | None" = None
+        # D-13: 마지막으로 연결된 활성 WebSocket (단일 사용자 전제)
+        self._active_ws: WebSocket | None = None
+
+    def _get_active_client_send_text(
+        self,
+    ) -> Callable[[dict[str, Any]], Awaitable[None]]:
+        """D-13: 가장 최근 연결된 활성 WebSocket에 JSON 페이로드를 송신하는 async 콜러블 반환.
+
+        활성 연결이 없으면 조용히 skip (logger.debug).
+        send_text 예외는 ProactiveDispatcher의 D-7 정책으로 삼켜진다.
+        """
+
+        async def _active_client_send_text(payload: dict[str, Any]) -> None:
+            ws = self._active_ws
+            if ws is None:
+                logger.debug("no active client, proactive message dropped")
+                return
+            await ws.send_text(json.dumps(payload))
+
+        return _active_client_send_text
 
     def init_vad(self, vad_config: Any) -> None:  # spec: §N-4, §E-1
         """upstream init_vad 오버라이드.
@@ -259,6 +282,29 @@ class AppServiceContext(ServiceContext):  # type: ignore[misc]
         except Exception as exc:
             logger.warning(f"idle_monitor 초기화 실패: {exc}")
             self.idle_monitor = None
+
+        # M-11: ProactiveDispatcher 초기화 (스펙 §8.3)
+        if self.calendar_service is not None and self.idle_monitor is not None:
+            try:
+                from proactive import ProactiveDispatcher
+
+                self.proactive_dispatcher = ProactiveDispatcher(
+                    calendar=self.calendar_service,
+                    idle_monitor=self.idle_monitor,
+                    send_text=self._get_active_client_send_text(),
+                    morning_time=app_config.morning_briefing_time,
+                    cooldown_min=app_config.proactive.cooldown_min,
+                    dnd_enabled=app_config.dnd_enabled,
+                )
+                logger.info("M_11 ProactiveDispatcher initialized.")
+            except Exception as exc:
+                logger.warning(f"proactive_dispatcher 초기화 실패: {exc}")
+                self.proactive_dispatcher = None
+        else:
+            logger.warning(
+                "calendar_service 또는 idle_monitor가 None이므로 proactive_dispatcher 조립 건너뜀"
+            )
+            self.proactive_dispatcher = None
 
         # 각 서비스는 해당 모듈 구현 완료 후 아래 형태로 추가:
         # try:

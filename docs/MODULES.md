@@ -376,31 +376,43 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 - **에러**: `pynput` 훅 초기화 실패 → 로그 경고, 서비스 자체는 no-op로 계속 기동(기능 비활성).
 - **의존**: `pynput`, `asyncio`.
 
-### M_11 ProactiveDispatcher (스케줄러 + 쿨다운)
+### M_11 ProactiveDispatcher (스케줄러 + 쿨다운 + DND)
 
 - **분류**: NEW
-- **상태**: 🔲 TODO
-- **목적**: APScheduler로 매일 09:00 브리핑 트리거, 1분 단위 일정 10분 전 체크. 쿨다운·DND 체크 후 upstream `ai-speak-signal` 프로액티브 경로로 WebSocket 발화 지시를 보낸다.
+- **상태**: ✅ DONE (Critic PASS R2, 2026-04-19; R1 FAIL 이력은 reviews/M_11_*_REVIEW{,_R2}.md 참조)
+- **목적**: APScheduler cron(매일 09:00 KST) + interval(1분) 잡과 M_10 IdleMonitor 콜백을
+  받아 토픽별 쿨다운·DND 정책을 적용한 뒤 upstream `ai-speak-signal` 경로로 WebSocket 발화 지시 발송.
 - **공개 API**
   ```python
-  ProactiveTopic = Literal["morning_briefing", "event_reminder",
-                           "idle_rest", "overwork"]
+  ProactiveTopic = Literal["morning_briefing", "event_reminder", "idle_rest", "overwork"]
+  SendTextCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
   class ProactiveDispatcher:
-      def __init__(self, calendar: CalendarService,
+      def __init__(self, *,
+                   calendar: CalendarService,
                    idle_monitor: IdleMonitor,
-                   send_text: Callable[[dict], Awaitable[None]],
+                   send_text: SendTextCallback,
                    morning_time: str = "09:00",
+                   timezone: ZoneInfo = ZoneInfo("Asia/Seoul"),
                    reminder_lead_minutes: int = 10,
-                   cooldown_min: int = 30) -> None: ...
+                   reminder_check_interval_seconds: int = 60,
+                   cooldown_min: int = 30,
+                   dnd_enabled: bool = False,
+                   clock: Callable[[], datetime] = datetime.now,
+                   scheduler: BaseScheduler | None = None) -> None: ...
       async def start(self) -> None: ...
       async def stop(self) -> None: ...
       async def emit(self, topic: ProactiveTopic,
                      context: dict[str, Any] | None = None) -> bool: ...
           # 반환 False: 쿨다운/DND로 드롭된 경우
+      def set_dnd(self, enabled: bool) -> None: ...
   ```
-- **에러**: 스케줄러 초기화 실패 → 기동 실패로 올리지 않고 로그 경고 + 프로액티브 기능만 OFF.
-- **의존**: `APScheduler`, M_09, M_10.
+  > **페이로드 4키**: `{type: "ai-speak-signal", text: str, topic: ProactiveTopic, context: dict}`.
+  > 쿨다운은 토픽별 독립. DND는 M_10/M_11 이중 체크(본 모듈이 M_10에 전파).
+- **에러**: APScheduler 초기화 실패 → `_enabled=False` 강등 + logger.error, 앱 기동 계속.
+  send_text 예외 → logger.error + return False (다음 틱 재시도).
+- **의존**: `APScheduler>=3.10,<4`, M_09 CalendarService, M_10 IdleMonitor.
+- **비고**: 공개 API는 Critic PASS 대기, 시그니처는 specs/M_11 §4 기준.
 
 ### M_12 Frontend (Electron + 스프라이트 렌더러)
 
@@ -440,7 +452,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 | M_08 | AvatarState | NEW | ✅ DONE | M_01 |
 | M_09 | CalendarService | NEW | ✅ DONE | specs/M_09_CalendarService_SPEC.md |
 | M_10 | IdleMonitor | NEW | ✅ DONE | — |
-| M_11 | ProactiveDispatcher | NEW | 🔲 TODO | M_09, M_10 |
+| M_11 | ProactiveDispatcher | NEW | ✅ DONE | M_09, M_10 |
 | M_12 | Frontend | FORK+NEW | 🔲 TODO | M_01 메시지 스키마 |
 
 ---
