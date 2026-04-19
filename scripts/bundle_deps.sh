@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# scripts/bundle_deps.sh
+#
+# 오프라인 번들 빌드 스크립트.
+#
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# 주의: 이 스크립트는 빌드 머신(인터넷 연결 O)에서만 실행한다.
+#       사내 PC (오프라인 배포 대상)에서는 절대 실행하지 말 것.
+#       모델 파일과 wheel 파일은 assets/ 및 wheels/ 디렉토리에 저장되며,
+#       이후 오프라인 설치 머신으로 복사한다.
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+# 사용법 (빌드 머신):
+#   bash scripts/bundle_deps.sh
+#
+# 전제조건:
+#   - pip, huggingface-cli (huggingface_hub) 설치됨
+#   - 인터넷 연결 가능 상태
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+WHEELS_DIR="${PROJECT_ROOT}/assets/wheels"
+MODELS_DIR="${PROJECT_ROOT}/assets/models"
+
+mkdir -p "${WHEELS_DIR}"
+mkdir -p "${MODELS_DIR}"
+
+echo "=== [bundle_deps.sh] Python 패키지 wheel 다운로드 ==="
+echo "  대상 디렉토리: ${WHEELS_DIR}"
+
+# M_02 ASREngine 의존성
+pip download \
+    "faster-whisper>=1.0,<2" \
+    "ctranslate2>=4.4,<5" \
+    --dest "${WHEELS_DIR}" \
+    --no-deps
+
+# 위에서 --no-deps를 썼으므로 전이 의존성도 별도 다운로드
+pip download \
+    "faster-whisper>=1.0,<2" \
+    "ctranslate2>=4.4,<5" \
+    --dest "${WHEELS_DIR}"
+
+echo ""
+echo "=== [bundle_deps.sh] Whisper 모델 아티팩트 다운로드 ==="
+echo "  빌드 머신에서만 실행 — 사내 PC에서 실행 금지."
+
+# RECOMMENDED 프로파일 모델: Whisper large-v3 int8
+echo "  [1/2] Systran/faster-whisper-large-v3 → ${MODELS_DIR}/whisper-large-v3-int8"
+huggingface-cli download Systran/faster-whisper-large-v3 \
+    --local-dir "${MODELS_DIR}/whisper-large-v3-int8" \
+    --local-dir-use-symlinks False
+
+# MIN 프로파일 모델: Whisper medium int8
+echo "  [2/2] Systran/faster-whisper-medium → ${MODELS_DIR}/whisper-medium-int8"
+huggingface-cli download Systran/faster-whisper-medium \
+    --local-dir "${MODELS_DIR}/whisper-medium-int8" \
+    --local-dir-use-symlinks False
+
+echo ""
+echo "=== [bundle_deps.sh] M_04 TTSEngine 의존성 ==="
+echo "  주의: melo 패키지명은 PyPI 확인 후 아래 주석 해제 필요"
+
+# M_04 TTS 의존성
+pip download \
+    "soundfile>=0.12,<1" \
+    "python-multipart>=0.0.9" \
+    --dest "${WHEELS_DIR}"
+
+# Coqui TTS (XTTS v2) — CPML 라이선스 주의, 법무 승인 후 활성화 (CR-02 참조)
+# pip download "TTS>=0.22,<1" --dest "${WHEELS_DIR}"
+
+# MeloTTS — PyPI 미등록. 설치 방법 확정 후 활성화 (docs/CHANGE_REQUESTS.md CR-01 참조)
+# git clone https://github.com/myshell-ai/MeloTTS.git /tmp/MeloTTS
+# pip wheel /tmp/MeloTTS --wheel-dir "${WHEELS_DIR}" --no-deps
+
+echo ""
+echo "=== [bundle_deps.sh] M_05b ToolRouter 의존성 ==="
+
+# M_05b ToolRouter — JSON Schema 검증, Windows 화면 캡처, PNG 인코딩
+pip download \
+    "jsonschema>=4.21,<5" \
+    "mss>=9.0,<10" \
+    "Pillow>=10.2,<12" \
+    --dest "${WHEELS_DIR}"
+
+echo ""
+echo "=== [bundle_deps.sh] M_04 TTS 모델 아티팩트 다운로드 ==="
+echo "  빌드 머신에서만 실행 — 사내 PC에서 실행 금지."
+
+echo "  [1/2] MeloTTS 한국어 모델 → ${MODELS_DIR}/melotts-ko"
+# CR-01 확정 후 활성화
+# huggingface-cli download myshell-ai/MeloTTS-Korean \
+#     --local-dir "${MODELS_DIR}/melotts-ko" \
+#     --local-dir-use-symlinks False
+
+echo "  [2/2] XTTS v2 모델 (CR-02 법무 승인 후 활성화) → ${MODELS_DIR}/xtts_v2"
+# huggingface-cli download coqui/XTTS-v2 \
+#     --local-dir "${MODELS_DIR}/xtts_v2" \
+#     --local-dir-use-symlinks False
+
+echo ""
+echo "=== [bundle_deps.sh] M_07 VectorSearch 의존성 ==="
+echo "  BGE-M3 임베딩, LanceDB 벡터 저장소, PyArrow 스키마, NumPy 배열"
+
+# M_07 VectorSearch — 벡터 검색 핵심 의존성
+pip download \
+    "sentence-transformers>=3.0,<5" \
+    "lancedb>=0.10,<1" \
+    "pyarrow>=15.0,<19" \
+    "numpy>=1.26,<3" \
+    --dest "${WHEELS_DIR}"
+
+echo ""
+echo "=== [bundle_deps.sh] M_07 BGE-M3 모델 다운로드 ==="
+echo "  빌드 머신에서만 실행 — 사내 PC에서 실행 금지."
+
+echo "  BAAI/bge-m3 → ${MODELS_DIR}/bge-m3"
+huggingface-cli download BAAI/bge-m3 \
+    --local-dir "${MODELS_DIR}/bge-m3" \
+    --local-dir-use-symlinks False
+
+echo ""
+echo "=== [bundle_deps.sh] 완료 ==="
+echo "  wheels : ${WHEELS_DIR}"
+echo "  models : ${MODELS_DIR}"
+echo ""
+echo "다음 단계: assets/ 디렉토리를 통째로 오프라인 배포 패키지에 포함시킨다."
+echo "오프라인 설치 시 'pip install --no-index --find-links=${WHEELS_DIR} faster-whisper ctranslate2 jsonschema mss Pillow'"
