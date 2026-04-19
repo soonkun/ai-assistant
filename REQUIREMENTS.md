@@ -12,7 +12,7 @@
 ### 1.1 음성 대화
 - STT(Speech-to-Text): 한국어, 영어 지원. 마이크 입력 연속 청취.
 - VAD(Voice Activity Detection)로 발화 구간만 전송.
-- TTS(Text-to-Speech): 한국어 여성 목소리 기본. 커스텀 보이스 카피 옵션.
+- TTS(Text-to-Speech): 한국어 여성 목소리 기본. 음성 클로닝(Voice Clone) 옵션.
 - **전이중(Full Duplex)**: 사용자가 AI 발화 중간에 끼어들면 AI는 즉시 멈추고 듣는다.
 
 ### 1.2 텍스트 대화
@@ -88,14 +88,18 @@
 - **LLM**: Gemma 4 E4B (Ollama `gemma4:e4b`) — 멀티모달, 함수 호출, 131K 컨텍스트.
 - **임베딩**: BGE-M3 (한국어 포함 다국어).
 - **STT**: faster-whisper large-v3 (또는 sherpa-onnx로 경량화).
-- **TTS**: Piper(한국어) 기본 + CosyVoice 2 옵션(품질).
+- **TTS**: MeloTTS(한국어) 기본 + XTTS v2 옵션(음성 클로닝). ※ Piper 공식 한국어 모델 미존재로 교체.
 - **리랭커**: Qwen3-Reranker-8B (필요 시에만).
 
 ## 9. 비기능 요구사항
 
 - **기동 시간**: 15초 이내에 초기 화면 표시.
-- **음성 응답 지연**: 사용자 발화 끝 → AI 첫 음성까지 2초 이내 목표.
-- **메모리**: 전체 프로세스 RSS 12GB 이하 (모델 포함).
+- **음성 응답 지연**: 사용자 발화 끝 → AI 첫 음성까지 목표 (스트리밍 TTS 첫 청크 기준).
+  - GPU(NVIDIA 8GB+): **2초 이내**.
+  - CPU-only: **6초 이내**.
+- **메모리**: 전체 프로세스 RSS (Electron 포함, 모델 포함):
+  - MIN 프로파일(RAM 16GB): **14GB 이하** — Whisper medium int8 사용.
+  - RECOMMENDED 프로파일(RAM 32GB): **20GB 이하** — Whisper large-v3, 리랭커 optional.
 - **프라이버시**: 어떤 형태로도 외부 네트워크 호출 금지. 위반 시 빌드 실패.
 - **로그**: PII(개인정보)는 마스킹. 로컬 로그 보관 7일.
 
