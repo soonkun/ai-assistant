@@ -379,7 +379,10 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 ### M_11 ProactiveDispatcher (스케줄러 + 쿨다운 + DND)
 
 - **분류**: NEW
-- **상태**: ✅ DONE (Critic PASS R2, 2026-04-19; R1 FAIL 이력은 reviews/M_11_*_REVIEW{,_R2}.md 참조)
+- **상태**: ✅ DONE (Critic PASS R2 2026-04-19, R3 fast-follow PASS 2026-04-19; 리뷰 reviews/M_11_*_REVIEW{,_R2,_R3}.md 참조)
+- **잔여 MINOR (backlog, 다음 모듈/통합 초입에서 처리)**:
+  - `dispatcher.py` L202-203: `on_event(None)` 예외 분기 coverage miss.
+  - `dispatcher.py` L390: `_minutes_until` tz-naive 분기 coverage miss.
 - **목적**: APScheduler cron(매일 09:00 KST) + interval(1분) 잡과 M_10 IdleMonitor 콜백을
   받아 토픽별 쿨다운·DND 정책을 적용한 뒤 upstream `ai-speak-signal` 경로로 WebSocket 발화 지시 발송.
 - **공개 API**

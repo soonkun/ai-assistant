@@ -485,10 +485,20 @@ Phase 3 완료 = 아래 7가지 조건을 **전부 만족**한 상태로 `docs/A
 
 ---
 
-## 6. Open Questions / 사용자 결정 필요 사항
+## 6. Open Questions / 사용자 결정 사항
 
-아래는 **Integrator가 착수 전에 사용자(=프로젝트 오너)의 결정**을 받아야 하는 항목이다. 이 문서는 결정을
-미루지 않고 선택지를 제시한다. 해당 항목이 결정되지 않으면 `docs/RISKS.md`에 즉시 등재.
+**2026-04-19 승인 완료.** Q-1~Q-6 모두 기본 옵션 채택, Q-6는 Yes.
+
+| ID | 결정 | 의미 |
+|---|---|---|
+| Q-1 | **A** | 실제 모델 E2E는 로컬/스테이지 전용. CI는 `e2e_fast`만. |
+| Q-2 | **A** | Ollama health check만, 미기동 시 `e2e_model` 자동 skip. |
+| Q-3 | **A** | Phase 3 E2E는 백엔드만. UI는 Phase 4/5로 분리. |
+| Q-4 | **A** | RAG 시드는 `docs/`, `specs/` MD 3~5개. M_06 착수 시 HWPX로 교체. |
+| Q-5 | **A** | Whisper 모델 부재 시 E2E-02/21/33 skip. |
+| Q-6 | **Yes** | FakeAgent 생성 권한을 Integrator에게 부여(M_05 공개 API 호환 Mock). |
+
+아래 원문은 선택 이력 보존용으로 유지한다.
 
 ### Q-1. 실제 모델을 쓰는 E2E를 CI에서 돌릴 것인가?
 
