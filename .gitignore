@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -16,6 +17,9 @@ build/
 *.safetensors
 *.onnx
 assets/models/
+
+# 사내 문서 샘플 (PII 위험 — tests/fixtures/hwpx의 합성본만 저장소에 올린다)
+assets/hwpx_samples/
 
 # Upstream은 참고용 — clone되지만 git에는 안 올림
 upstream/
@@ -36,6 +40,7 @@ logs/
 
 # Local data
 data/
+cache/
 *.db
 *.sqlite
 *.sqlite3
