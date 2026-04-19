@@ -14,5 +14,7 @@ ProactiveTopic = Literal["morning_briefing", "event_reminder", "idle_rest", "ove
 - overwork: 2시간 연속 활동 후 휴식 권고.
 """
 
-TOPICS: frozenset[str] = frozenset(["morning_briefing", "event_reminder", "idle_rest", "overwork"])
+TOPICS: frozenset[ProactiveTopic] = frozenset(
+    ["morning_briefing", "event_reminder", "idle_rest", "overwork"]
+)
 """토픽 상수 집합 (typo 검증용)."""

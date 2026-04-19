@@ -343,7 +343,7 @@ class ProactiveDispatcher:
         # topic이 ProactiveTopic과 호환되는 문자열임을 타입 체크 없이 전달
         # (D-11: IdleEvent Literal과 동일 문자열)
         if topic in TOPICS:
-            await self.emit(topic, context={})  # type: ignore[arg-type]
+            await self.emit(topic, context={})
         else:
             logger.warning("_on_idle_event: unknown topic=%r", topic)
 

@@ -580,3 +580,111 @@ class TestEventReminderDedupFixed:
             f"두 번째 틱에서 send_text가 호출됨 (call_count={second_call_count}). "
             "_notified_reminders 드롭이 작동하지 않음."
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# M3-e: reminder_check_interval_seconds 범위 검증 테스트 (MINOR #1)
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestConstructorValidationExtra:
+    """MINOR #1: reminder_check_interval_seconds 범위 검증 (M3-e)."""
+
+    def test_m3e_reminder_check_interval_seconds_out_of_range_raises_valueerror(
+        self,
+    ) -> None:
+        """M3-e: reminder_check_interval_seconds=0 또는 =3601 → ValueError."""
+        # 하한 위반 (0)
+        with pytest.raises(ValueError, match="reminder_check_interval_seconds"):
+            ProactiveDispatcher(
+                calendar=FakeCalendar(),
+                idle_monitor=FakeIdleMonitor(),
+                send_text=AsyncMock(),
+                reminder_check_interval_seconds=0,
+            )
+
+        # 상한 위반 (3601)
+        with pytest.raises(ValueError, match="reminder_check_interval_seconds"):
+            ProactiveDispatcher(
+                calendar=FakeCalendar(),
+                idle_monitor=FakeIdleMonitor(),
+                send_text=AsyncMock(),
+                reminder_check_interval_seconds=3601,
+            )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# MINOR #6: 에러 분기 3종 미커버 테스트
+# ──────────────────────────────────────────────────────────────────────
+
+
+class TestErrorBranches:
+    """MINOR #6: stop() shutdown 예외 삼킴, _on_idle_event unknown topic, tz-naive 분기."""
+
+    @pytest.mark.asyncio
+    async def test_stop_shutdown_exception_swallowed(self) -> None:
+        """stop() 내 scheduler.shutdown() RuntimeError → 예외 전파 없음.
+
+        shutdown 예외 발생 후에도 stop()이 완료(_started=False)되고
+        idle_monitor 콜백이 해제(None)됨을 확인한다.
+        """
+        idle_monitor = FakeIdleMonitor()
+        scheduler = FakeScheduler()
+        dispatcher = make_dispatcher(scheduler=scheduler, idle_monitor=idle_monitor)
+        await dispatcher.start()
+
+        assert idle_monitor._callback is not None  # 콜백 등록 확인
+
+        # shutdown이 RuntimeError를 일으키도록 패치
+        def _bad_shutdown(wait: bool = True) -> None:  # noqa: FBT001
+            raise RuntimeError("scheduler gone")
+
+        scheduler.shutdown = _bad_shutdown  # type: ignore[method-assign]
+
+        # 예외가 전파되면 안 됨
+        await dispatcher.stop()
+
+        # stop()이 완전히 실행됨을 확인
+        assert dispatcher._started is False
+        assert idle_monitor._callback is None
+
+    @pytest.mark.asyncio
+    async def test_on_idle_event_unknown_topic_warns(self) -> None:
+        """_on_idle_event("bogus_topic") → send_text 미호출 + dispatcher 생존."""
+        send_text = AsyncMock()
+        dispatcher = make_dispatcher(send_text=send_text)
+        await dispatcher.start()
+
+        # 예외 전파 없이 실행되어야 함
+        await dispatcher._on_idle_event("bogus_topic")
+
+        # unknown topic → emit 미호출
+        send_text.assert_not_called()
+        # dispatcher는 여전히 정상 동작 가능
+        assert dispatcher._enabled is True
+
+    @pytest.mark.asyncio
+    async def test_cleanup_handles_tz_naive_start(self) -> None:
+        """_cleanup_notified_reminders: tz-naive start datetime → 예외 없이 fallback 분기 실행.
+
+        tz-naive datetime을 UTC로 replace한 후 만료 판정을 수행한다.
+        충분히 오래 전 시각(25시간 전)을 사용해 시간대 차이(최대 ±14h)를 고려해도
+        항상 만료 판정되도록 한다.
+        """
+        # tz-naive datetime: 25시간 전 (tzinfo=None) — 어느 시간대에서도 "과거"
+        naive_start = datetime(2000, 1, 1, 0, 0, 0)  # 명시적 과거, tzinfo 없음
+        assert naive_start.tzinfo is None, "테스트 전제: tzinfo가 없어야 함"
+
+        # duration=30분 → 2000-01-01 00:30 UTC → 현재보다 훨씬 과거 → 제거 대상
+        ev = FakeEvent(id=77, title="naive 이벤트", start=naive_start, duration_minutes=30)
+        calendar = FakeCalendar(all_events=[ev])
+        dispatcher = make_dispatcher(calendar=calendar)
+        await dispatcher.start()
+
+        dispatcher._notified_reminders.add(77)
+
+        # 예외 없이 통과해야 함 (tz-naive → UTC 간주 fallback 분기)
+        await dispatcher._cleanup_notified_reminders()
+
+        # 충분히 오래된 과거 → 만료 판정 → 제거되어야 함
+        assert 77 not in dispatcher._notified_reminders

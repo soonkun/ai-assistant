@@ -477,26 +477,124 @@ class TestM11ProactiveDispatcherWiring:
         assert "calendar" in captured_kwargs, "calendar 인자가 전달되지 않음"
         assert "idle_monitor" in captured_kwargs, "idle_monitor 인자가 전달되지 않음"
         assert "send_text" in captured_kwargs, "send_text 인자가 전달되지 않음"
+        assert callable(captured_kwargs["send_text"]), "send_text가 callable이 아님"
 
         # calendar_service와 동일 인스턴스인지 확인
         assert captured_kwargs["calendar"] is ctx.calendar_service
         assert captured_kwargs["idle_monitor"] is ctx.idle_monitor
 
     @pytest.mark.asyncio
-    async def test_proactive_dispatcher_none_when_calendar_or_idle_monitor_missing(self) -> None:
-        """calendar 또는 idle_monitor가 None이면 proactive_dispatcher=None (배선 조건 분기 검증)."""
+    @pytest.mark.parametrize(
+        "fail_service",
+        ["calendar_service", "idle_monitor"],
+        ids=["calendar_missing", "idle_monitor_missing"],
+    )
+    async def test_proactive_dispatcher_none_when_calendar_or_idle_monitor_missing(
+        self, fail_service: str
+    ) -> None:
+        """calendar 또는 idle_monitor 초기화 실패 시 load_app_services 후 proactive_dispatcher=None.
+
+        배선 분기 `if ctx.calendar_service is not None and ctx.idle_monitor is not None:`를
+        `if True:`로 mutation하면 이 테스트가 FAIL해야 한다.
+        """
+        import sys
+
+        ctx = _make_ctx_raw()
+        app_cfg = AppConfig()  # type: ignore[call-arg]
+
+        mock_pd_cls = MagicMock(return_value=MagicMock(name="ProactiveDispatcherInstance"))
+
+        mock_proactive_module = MagicMock()
+        mock_proactive_module.ProactiveDispatcher = mock_pd_cls
+
+        mock_tool_module = MagicMock()
+
+        class _FakeSSInitError(Exception):
+            pass
+
+        mock_tool_module.ScreenshotService = MagicMock(side_effect=_FakeSSInitError("비-Windows"))
+        mock_tool_module.ScreenshotInitError = _FakeSSInitError
+        mock_tool_module.ToolRouter = MagicMock()
+        mock_tool_module.ToolRouterAdapter = MagicMock()
+
+        # 각 케이스별로 해당 서비스 초기화가 실패하도록 patch
+        patches: dict = {
+            "proactive": mock_proactive_module,
+            "tool_router": mock_tool_module,
+        }
+
+        if fail_service == "calendar_service":
+            # CalendarService 동적 import를 실패시킴
+            mock_cal_svc_module = MagicMock()
+            mock_cal_svc_module.CalendarService = MagicMock(side_effect=RuntimeError("DB 없음"))
+            patches["calendar_service.service"] = mock_cal_svc_module
+        else:
+            # IdleMonitor를 patch해 초기화 실패 유도
+            pass  # idle_monitor는 아래 patch.object로 처리
+
+        if fail_service == "idle_monitor":
+            with (
+                patch.dict(sys.modules, patches),
+                patch(
+                    "app.service_context.IdleMonitor",
+                    side_effect=RuntimeError("pynput 없음"),
+                ),
+            ):
+                await ctx.load_app_services(app_cfg)
+        else:
+            with patch.dict(sys.modules, patches):
+                await ctx.load_app_services(app_cfg)
+
+        assert ctx.proactive_dispatcher is None, (
+            f"{fail_service} 초기화 실패 시에도 proactive_dispatcher가 설정됨: "
+            f"{ctx.proactive_dispatcher!r}"
+        )
+
+
+class TestActiveClientSendTextLateBinding:
+    """MINOR #3: _get_active_client_send_text late-binding 회귀 테스트."""
+
+    @pytest.mark.asyncio
+    async def test_active_ws_late_binding(self) -> None:
+        """반환된 콜러블이 호출 시점의 _active_ws를 읽는다 (late-binding 검증).
+
+        early-binding으로 리팩토링되면 ws2.send_text가 호출되지 않아 테스트 FAIL.
+        """
+        import json
+
         ctx = _make_ctx_raw()
 
-        # calendar_service와 idle_monitor를 None으로 강제 설정
-        ctx.calendar_service = None
-        ctx.idle_monitor = None
+        # 1단계: ws1 세팅 후 콜러블 획득
+        ws1 = AsyncMock()
+        ctx._active_ws = ws1
+        send = ctx._get_active_client_send_text()  # 콜러블 한 번 획득
 
-        # load_app_services 대신 직접 M-11 배선 조건 경로만 트리거
-        # (실제 load_app_services는 여러 부수 효과가 있으므로, 내부 조건 검증은
-        # calendar_service와 idle_monitor가 None인 상태에서 proactive_dispatcher가 None인지 확인)
-        assert ctx.proactive_dispatcher is None, (
-            "calendar/idle_monitor가 None임에도 proactive_dispatcher가 설정됨"
+        # 2단계: send 호출 → ws1.send_text에 json.dumps 결과
+        payload: dict = {"type": "ai-speak-signal", "text": "A", "topic": "x", "context": {}}
+        await send(payload)
+
+        ws1.send_text.assert_called_once_with(json.dumps(payload))
+
+        # 3단계: _active_ws를 ws2로 갱신
+        ws2 = AsyncMock()
+        ctx._active_ws = ws2
+
+        # 4단계: 같은 send 콜러블 재호출 → ws2.send_text가 호출되어야 함
+        await send(payload)
+
+        ws2.send_text.assert_called_once_with(json.dumps(payload))
+        # ws1.send_text 호출 횟수는 1회 유지 (증가 금지)
+        assert ws1.send_text.call_count == 1, (
+            f"ws1.send_text가 추가 호출됨 (count={ws1.send_text.call_count}). "
+            "early-binding으로 고정된 것으로 의심됨."
         )
+
+        # 5단계: _active_ws=None → 조용히 return (어느 ws도 호출 안 됨)
+        ctx._active_ws = None
+        await send(payload)
+
+        assert ws1.send_text.call_count == 1, "ws1.send_text가 None 상태에서 호출됨"
+        assert ws2.send_text.call_count == 1, "ws2.send_text가 None 상태에서 호출됨"
 
 
 class TestM08AvatarStateWiring:
