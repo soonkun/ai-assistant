@@ -1,0 +1,86 @@
+system_config:
+  conf_version: "v1.0.0"
+  host: "127.0.0.1"
+  port: 12393
+  config_alts_dir: "characters"
+  enable_proxy: false
+  tool_prompts:
+    live2d_expression_prompt: "live2d_expression_prompt"
+    proactive_speak_prompt: "proactive_speak_prompt"
+
+character_config:
+  conf_name: "saessagi"
+  conf_uid: "saessagi-v1"
+  live2d_model_name: ""
+  persona_prompt: "너는 새싹이야."
+  avatar: "saessagi.png"
+  asr_config:
+    asr_model: "faster_whisper"
+    faster_whisper:
+      model_path: "assets/models/whisper-large-v3-int8"
+      download_root: "assets/models"
+      language: "ko"
+      compute_type: "int8"
+      device: "auto"
+      prompt: ""
+  tts_config:
+    tts_model: "melo_tts"
+    melo_tts:
+      speaker: "KR"
+      language: "KR"
+      device: "auto"
+      speed: 1.0
+  vad_config:
+    vad_model: "silero_vad"
+    silero_vad:
+      orig_sr: 16000
+      target_sr: 16000
+      prob_threshold: 0.4
+      db_threshold: 60
+      required_hits: 3
+      required_misses: 24
+      smoothing_window: 5
+  agent_config:
+    conversation_agent_choice: "basic_memory_agent"
+    agent_settings:
+      basic_memory_agent:
+        llm_provider: "ollama_llm"
+        use_mcpp: false
+        mcp_enabled_servers: []
+    llm_configs:
+      ollama_llm:
+        base_url: "https://api.openai.com/v1"
+        model: "gemma4:e4b"
+        temperature: 0.7
+        keep_alive: 300
+  tts_preprocessor_config:
+    remove_special_char: true
+    ignore_brackets: true
+    ignore_parentheses: true
+    ignore_asterisks: true
+    ignore_angle_brackets: true
+    translator_config:
+      translate_audio: false
+      translate_provider: "deeplx"
+
+app:
+  profile: min
+  ollama:
+    base_url: "https://api.openai.com/v1"
+    model: "gemma4:e4b"
+    keep_alive_seconds: 300
+    request_timeout_seconds: 120
+  paths:
+    data_dir: "data"
+    assets_dir: "assets"
+    vector_store_dir: "data/vector_store"
+    calendar_db_path: "data/calendar.db"
+    chat_history_dir: "data/chat_history"
+    log_dir: "data/logs"
+  idle_threshold_min: 45
+  overwork_threshold_min: 120
+  proactive_cooldown_min: 30
+  morning_briefing_time: "09:00"
+  dnd_enabled: false
+  rag_min_score: 0.35
+  screenshot_continuous_interval_sec: 5

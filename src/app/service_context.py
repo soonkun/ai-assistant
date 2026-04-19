@@ -1,0 +1,315 @@
+# src/app/service_context.py
+"""AppServiceContext — upstream ServiceContext를 상속해 본 프로젝트 서비스 필드를 추가."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from loguru import logger
+
+from open_llm_vtuber.service_context import ServiceContext  # upstream
+
+if TYPE_CHECKING:
+    from .config import AppConfig
+
+    # 하위 모듈(M_06~M_11) — 미구현 상태. TYPE_CHECKING 블록에서만 import해 런타임 오류 방지.
+    # 각 모듈 구현 완료 후 실제 타입으로 교체할 것.
+    from typing import Any as RagService
+    from typing import Any as CalendarService
+    from typing import Any as IdleMonitor
+    from typing import Any as AvatarState
+    from typing import Any as ProactiveDispatcher
+    from tool_router import ScreenshotService, ToolRouter, ToolRouterAdapter
+
+
+class AppServiceContext(ServiceContext):  # type: ignore[misc]
+    """upstream ServiceContext 서브클래스.
+
+    하위 모듈(M_06~M_11)이 미완성인 동안 모든 확장 필드는 None.
+    각 필드는 해당 모듈 구현 완료 후 load_app_services에서 주입.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        # M_07 완료 후 주입
+        self.rag_service: "RagService | None" = None
+        # M_09 완료 후 주입
+        self.calendar_service: "CalendarService | None" = None
+        # M_10 완료 후 주입
+        self.idle_monitor: "IdleMonitor | None" = None
+        # M_08 완료 후 주입
+        self.avatar_state: "AvatarState | None" = None
+        # M_11 완료 후 주입
+        self.proactive_dispatcher: "ProactiveDispatcher | None" = None
+        # M_05b 완료 후 주입 (CR-05에서 타입 확정)
+        self.screenshot_service: "ScreenshotService | None" = None
+        # CR-05: ToolRouter/Adapter 필드 신설
+        self.tool_router: "ToolRouter | None" = None
+        self.tool_router_adapter: "ToolRouterAdapter | None" = None
+        # load_full_config 후 주입
+        self.app_config: "AppConfig | None" = None
+
+    def init_vad(self, vad_config: Any) -> None:  # spec: §N-4, §E-1
+        """upstream init_vad 오버라이드.
+
+        추가 동작 (실제 재초기화가 필요한 경우에만):
+        - vad_model=None: WARNING 로그 1건 (spec §N-4, §에러 처리)
+        - target_sr != 16000: WARNING 로그 1건 (spec §E-1)
+
+        upstream short-circuit (동일 config 재호출) 시에는 WARNING을 발생시키지 않는다.
+        """
+        should_init = not self.vad_engine or self.character_config.vad_config != vad_config
+        if should_init:
+            if vad_config.vad_model is None:
+                logger.warning(
+                    "VAD is disabled (vad_model=null). "
+                    "Speech detection will not function. "
+                    "This is only acceptable in development/debug mode."
+                )
+            elif (
+                vad_config.silero_vad is not None
+                and getattr(vad_config.silero_vad, "target_sr", 16000) != 16000
+            ):
+                logger.warning(
+                    f"VAD target_sr={vad_config.silero_vad.target_sr} is not 16000. "
+                    "Only 16000 Hz has been validated for this project. "
+                    "Proceeding, but results may be unreliable."
+                )
+        super().init_vad(vad_config)
+
+    def init_tts(self, tts_config: Any) -> None:  # spec: M_04 §배선 정책
+        """upstream init_tts 오버라이드.
+
+        upstream init_tts 가드(동일 config 재호출 시 스킵) 패턴:
+        - should_init이 True일 때만 build_tts_engine으로 교체.
+        - self.app_config가 없으면 (load_app_services 이전) upstream 기본 동작에 위임.
+        """
+        should_init = not self.tts_engine or self.character_config.tts_config != tts_config  # type: ignore[has-type]
+        if should_init and self.app_config is not None:
+            from tts.builder import build_tts_engine
+            from tts.errors import TTSInitError
+
+            try:
+                self.tts_engine = build_tts_engine(self.app_config)
+                logger.info("TTS engine initialized via build_tts_engine")
+            except TTSInitError as exc:
+                logger.warning(
+                    "TTSInitError: TTS engine init failed: %s. "
+                    "Text chat will continue without TTS.",
+                    exc,
+                )
+                self.tts_engine = None  # type: ignore[assignment]
+            # upstream short-circuit용 config 동기화
+            self.character_config.tts_config = tts_config
+        else:
+            super().init_tts(tts_config)
+
+    async def load_from_config(self, config: Any) -> None:
+        """upstream Config를 받아 부모 load_from_config 호출.
+
+        init_agent 오버라이드가 _init_mcp_components 직후에 디스패치되므로
+        build_chat_agent/CompositeToolExecutor 배선은 init_agent에서 완결됨 (CR-03).
+        """
+        await super().load_from_config(config)
+
+    async def init_agent(self, agent_config: Any, persona_prompt: str) -> None:  # type: ignore[override]
+        """upstream init_agent 오버라이드 (CR-03).
+
+        AgentFactory.create_agent를 회피하고 build_chat_agent +
+        BasicMemoryAgentAdapter + CompositeToolExecutor를 배선한다.
+        M_04 init_tts와 동일 패턴.
+
+        Args:
+            agent_config: upstream character_config.agent_config (Any로 받아 순환 import 방지).
+            persona_prompt: upstream character_config.persona_prompt.
+
+        Raises:
+            AgentInitError: self.app_config is None 또는 build_chat_agent 초기화 실패.
+            AgentBackendError: Ollama 헬스체크 3회 모두 실패 (전파, 폴백 금지).
+        """
+        # (1) idempotency 가드
+        if (
+            self.agent_engine is not None
+            and agent_config == self.character_config.agent_config
+            and persona_prompt == self.character_config.persona_prompt
+        ):
+            logger.info("AppServiceContext.init_agent: 동일 config — 재초기화 건너뜀")
+            return
+
+        # (2) app_config 검증
+        from agent.errors import AgentInitError
+
+        if self.app_config is None:
+            raise AgentInitError(
+                "AppServiceContext.init_agent: app_config is None. "
+                "load_app_services를 load_from_config 이전에 호출하십시오."
+            )
+
+        # (3) system_prompt 구성
+        logger.info("AppServiceContext.init_agent: system_prompt 구성 중")
+        system_prompt = await self.construct_system_prompt(persona_prompt)
+
+        # (4) MCP tool_manager / tool_executor 확보 (_init_mcp_components 결과)
+        mcp_tool_manager = self.tool_manager
+        mcp_tool_executor = self.tool_executor
+
+        # (5) ToolRouterAdapter가 있으면 CompositeToolExecutor 생성
+        if self.tool_router_adapter is not None:
+            composite = self.tool_router_adapter.as_upstream_tool_executor(
+                fallback=mcp_tool_executor
+            )
+            self.tool_executor = composite
+            extra_specs = self.tool_router.tool_specs()  # type: ignore[union-attr]
+            logger.info(
+                "AppServiceContext.init_agent: CompositeToolExecutor 생성 완료, "
+                f"extra_specs={len(extra_specs)}건"
+            )
+        else:
+            extra_specs = None
+            logger.info(
+                "AppServiceContext.init_agent: tool_router_adapter=None — "
+                "degraded 모드, extra_specs=None"
+            )
+
+        # (6) GemmaChatAgent 빌드 (예외는 전파, 폴백 금지)
+        from agent.builder import build_chat_agent
+        from agent.upstream_adapter import BasicMemoryAgentAdapter
+
+        logger.info("AppServiceContext.init_agent: build_chat_agent 호출")
+        gemma_agent = await build_chat_agent(
+            app_config=self.app_config,
+            ollama_config=self.app_config.ollama,
+            tool_manager=mcp_tool_manager,
+            tool_executor=self.tool_executor,
+            system_prompt=system_prompt,
+            extra_tool_specs=extra_specs,
+        )
+
+        # (7) 어댑터 래핑
+        self.agent_engine = BasicMemoryAgentAdapter(gemma_agent)
+        logger.info("AppServiceContext.init_agent: BasicMemoryAgentAdapter 배선 완료")
+
+        # (8) config 동기화
+        self.character_config.agent_config = agent_config
+        self.system_prompt = system_prompt
+
+    async def load_app_services(self, app_config: "AppConfig") -> None:
+        """본 프로젝트 고유 서비스(RAG/Calendar/Idle/Avatar/Proactive/Screenshot) 초기화.
+
+        각 서비스의 생성자 호출만 수행. 실패해도 앱 기동은 계속 (로그 경고).
+        CR-05: ScreenshotService → ToolRouter → ToolRouterAdapter 순으로 조립.
+        """
+        self.app_config = app_config
+        logger.info("AppServiceContext.load_app_services: app_config 로드 완료")
+
+        # M-09: CalendarService 초기화 (ToolRouter 조립 전)
+        try:
+            from calendar_service.service import CalendarService
+
+            self.calendar_service = CalendarService(app_config.paths.calendar_db_path)
+            logger.info("CalendarService 초기화 완료")
+        except Exception as exc:
+            logger.warning(f"calendar_service 초기화 실패: {exc}")
+            self.calendar_service = None
+
+        # CR-05: ScreenshotService 조립
+        # send_text 콜백은 per-client이므로 여기서는 None (ws_handler가 직접 전달).
+        from tool_router import (
+            ScreenshotInitError,
+            ScreenshotService,
+            ToolRouter,
+            ToolRouterAdapter,
+        )
+
+        try:
+            self.screenshot_service = ScreenshotService(send_text=None)
+            logger.info("ScreenshotService 초기화 완료")
+        except ScreenshotInitError as exc:
+            logger.warning(f"screenshot_service 초기화 실패(비-Windows 등): {exc}")
+            self.screenshot_service = None
+
+        # CR-05: ToolRouter/Adapter 조립.
+        # M_05b 스펙 §4.3 "screenshot=None 금지, TypeError" → screenshot_service가 None이면 조립 안 함.
+        if self.screenshot_service is not None:
+            self.tool_router = ToolRouter(
+                calendar=self.calendar_service,  # None 허용 — M_07 미구현
+                rag=self.rag_service,  # None 허용 — M_09 미구현
+                screenshot=self.screenshot_service,
+            )
+            self.tool_router_adapter = ToolRouterAdapter(self.tool_router)
+            logger.info("ToolRouter/ToolRouterAdapter 조립 완료")
+        else:
+            self.tool_router = None
+            self.tool_router_adapter = None
+            logger.warning("screenshot_service가 None이므로 ToolRouter 조립 건너뜀")
+
+        # 각 서비스는 해당 모듈 구현 완료 후 아래 형태로 추가:
+        # try:
+        #     self.rag_service = RagService(app_config)
+        # except Exception as exc:
+        #     logger.warning(f"rag_service 초기화 실패: {exc}")
+
+    async def close(self) -> None:
+        """부모 close + 본 프로젝트 서비스 stop/close.
+
+        순서 (CR-05 §필요 변경 3 기준):
+          idle_monitor.stop() → proactive_dispatcher.stop()
+          → screenshot_service.aclose() (연속 캡처 누수 방지)
+          → rag_service.close() → calendar_service.close()
+          → super().close()
+        각 stop/close는 개별 try/except로 감싸 한 서비스 실패가 다른 정리를 막지 않도록.
+        """
+        if self.idle_monitor is not None:
+            try:
+                await _call_stop(self.idle_monitor, "idle_monitor")
+            except Exception as exc:
+                logger.error(f"idle_monitor.stop() 실패: {exc}")
+
+        if self.proactive_dispatcher is not None:
+            try:
+                await _call_stop(self.proactive_dispatcher, "proactive_dispatcher")
+            except Exception as exc:
+                logger.error(f"proactive_dispatcher.stop() 실패: {exc}")
+
+        # CR-05: screenshot_service.aclose() — 연속 캡처 루프 종료 및 mss 리소스 해제
+        if self.screenshot_service is not None:
+            try:
+                await self.screenshot_service.aclose()
+                logger.debug("screenshot_service.aclose() 완료")
+            except Exception as exc:
+                logger.error(f"screenshot_service.aclose() 실패: {exc}")
+
+        if self.rag_service is not None:
+            try:
+                await _call_close(self.rag_service, "rag_service")
+            except Exception as exc:
+                logger.error(f"rag_service.close() 실패: {exc}")
+
+        if self.calendar_service is not None:
+            try:
+                await _call_close(self.calendar_service, "calendar_service")
+            except Exception as exc:
+                logger.error(f"calendar_service.close() 실패: {exc}")
+
+        try:
+            await super().close()
+        except Exception as exc:
+            logger.error(f"super().close() 실패: {exc}")
+
+
+async def _call_stop(service: Any, name: str) -> None:
+    """서비스의 stop() 메서드를 호출. 코루틴이면 await."""
+    if hasattr(service, "stop"):
+        result = service.stop()
+        if hasattr(result, "__await__"):
+            await result
+        logger.debug(f"{name}.stop() 완료")
+
+
+async def _call_close(service: Any, name: str) -> None:
+    """서비스의 close() 메서드를 호출. 코루틴이면 await."""
+    if hasattr(service, "close"):
+        result = service.close()
+        if hasattr(result, "__await__"):
+            await result
+        logger.debug(f"{name}.close() 완료")
