@@ -142,6 +142,16 @@ pip download \
     --dest "${WHEELS_DIR}"
 
 echo ""
+echo "=== [bundle_deps.sh] M_11 ProactiveDispatcher 의존성 ==="
+echo "  APScheduler: cron + interval 스케줄러 (AsyncIOScheduler)"
+
+# APScheduler — 순수 파이썬, 모든 플랫폼 공통
+# 전이 의존성(tzlocal, pytz_deprecation_shim 등)은 pip download가 자동 해결
+pip download \
+    "APScheduler>=3.10,<4" \
+    --dest "${WHEELS_DIR}"
+
+echo ""
 echo "=== [bundle_deps.sh] 완료 ==="
 echo "  wheels : ${WHEELS_DIR}"
 echo "  models : ${MODELS_DIR}"

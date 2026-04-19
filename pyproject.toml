@@ -40,6 +40,8 @@ dependencies = [
     # M_10 IdleMonitor: 전역 키보드·마우스 훅 + Windows GetLastInputInfo 폴백
     "pynput>=1.7,<2",
     "pywin32>=306; sys_platform == 'win32'",
+    # M_11 ProactiveDispatcher: APScheduler AsyncIOScheduler, CronTrigger, IntervalTrigger
+    "APScheduler>=3.10,<4",
 ]
 
 [project.optional-dependencies]
@@ -129,6 +131,9 @@ module = "win32api.*"
 ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "win32con.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
