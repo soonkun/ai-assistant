@@ -37,6 +37,9 @@ dependencies = [
     "lancedb>=0.10,<1",
     "pyarrow>=15.0,<19",
     "numpy>=1.26,<3",
+    # M_10 IdleMonitor: 전역 키보드·마우스 훅 + Windows GetLastInputInfo 폴백
+    "pynput>=1.7,<2",
+    "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
@@ -117,6 +120,15 @@ module = "lancedb.*"
 ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "pyarrow.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "pynput.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "win32api.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "win32con.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

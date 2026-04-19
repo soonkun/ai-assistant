@@ -124,6 +124,24 @@ huggingface-cli download BAAI/bge-m3 \
     --local-dir-use-symlinks False
 
 echo ""
+echo "=== [bundle_deps.sh] M_10 IdleMonitor 의존성 ==="
+echo "  pynput: 전역 키보드·마우스 훅 (Primary 백엔드)"
+echo "  pywin32: Windows GetLastInputInfo 폴백 (Windows 전용 wheel)"
+
+# pynput — 모든 플랫폼 (WSL/Linux에서도 import 가능해야 하므로 플랫폼 제한 없음)
+pip download \
+    "pynput>=1.7,<2" \
+    --dest "${WHEELS_DIR}"
+
+# pywin32 — Windows 전용. 빌드 머신이 Linux라면 --platform으로 Windows wheel 명시.
+pip download \
+    "pywin32>=306" \
+    --platform win_amd64 \
+    --python-version 3.12 \
+    --only-binary=:all: \
+    --dest "${WHEELS_DIR}"
+
+echo ""
 echo "=== [bundle_deps.sh] 완료 ==="
 echo "  wheels : ${WHEELS_DIR}"
 echo "  models : ${MODELS_DIR}"
