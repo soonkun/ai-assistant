@@ -1,0 +1,327 @@
+# src/tool_router/router.py
+"""ToolRouter — Gemma tool_call → 로컬 파이썬 핸들러 디스패처."""
+
+import asyncio
+import logging
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
+
+from jsonschema import Draft202012Validator
+
+from .errors import ScreenshotCaptureError
+from .schemas import ALL_TOOL_SCHEMAS
+from .types import ToolResult, ToolSpec
+
+if TYPE_CHECKING:
+    from .screenshot import ScreenshotService
+
+logger = logging.getLogger(__name__)
+
+_KST = ZoneInfo("Asia/Seoul")
+
+
+def _service_unavail(tool_name: str) -> ToolResult:
+    logger.warning("service_unavailable: %s", tool_name)
+    return ToolResult(
+        ok=False,
+        error=f"service_unavailable: {tool_name}",
+        error_code="service_unavailable",
+    )
+
+
+class ToolRouter:
+    """Gemma tool_call → 로컬 파이썬 핸들러 디스패처.
+
+    생성자 주입 서비스가 None이면 해당 툴은 런타임에 service_unavailable을 반환한다.
+    (초기화는 성공하되, 호출 시 실패하는 정책 — 부트 시 일부 서비스가 없어도 나머지 툴은 동작)
+    """
+
+    LOCAL_TOOL_NAMES: frozenset[str] = frozenset(
+        {"add_event", "get_events", "search_docs", "take_screenshot"}
+    )
+
+    def __init__(
+        self,
+        calendar: Any,  # CalendarService | None
+        rag: Any,  # RagService | None
+        screenshot: "ScreenshotService",
+    ) -> None:
+        """
+        Args:
+            calendar: M_09 CalendarService 인스턴스. None이면 add_event/get_events가 service_unavailable.
+            rag: M_07 RagService 인스턴스. None이면 search_docs가 service_unavailable.
+            screenshot: M_05b 내부 ScreenshotService 인스턴스. **None 금지**(항상 제공).
+
+        Raises:
+            TypeError: screenshot is None.
+        """
+        if screenshot is None:
+            logger.error("ToolRouter: screenshot 인자는 None이 될 수 없습니다.")
+            raise TypeError("screenshot 인자는 None이 될 수 없습니다.")
+
+        self._calendar = calendar
+        self._rag = rag
+        self._screenshot = screenshot
+
+        # JSON Schema Validator를 __init__ 시 4개 컴파일 후 재사용
+        self._validators: dict[str, Draft202012Validator] = {}
+        for spec in ALL_TOOL_SCHEMAS:
+            name: str = spec["function"]["name"]
+            params: dict[str, Any] = spec["function"]["parameters"]
+            self._validators[name] = Draft202012Validator(params)
+
+        logger.info("ToolRouter 초기화 완료. 등록 툴: %s", sorted(self._validators.keys()))
+
+    def tool_specs(self) -> list[ToolSpec]:
+        """4개 툴의 OpenAI function-calling JSON schema 리스트를 반환.
+
+        반환 리스트는 **호출마다 새 사본**(list copy)이다. 호출 측의 수정이 내부 상태를
+        오염시키지 않도록 보호한다.
+        """
+        return list(ALL_TOOL_SCHEMAS)
+
+    async def dispatch(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+        """tool_call 이름·인자를 받아 핸들러를 호출.
+
+        항상 ToolResult를 반환하며 예외를 raise하지 않는다 (CancelledError 제외).
+        """
+        # (1) 이름 화이트리스트
+        if name not in self.LOCAL_TOOL_NAMES:
+            logger.info("unknown_tool: %s", name)
+            return ToolResult(
+                ok=False,
+                error=f"unknown_tool: {name}",
+                error_code="unknown_tool",
+            )
+
+        # (2) arguments 타입 검사
+        if not isinstance(arguments, dict):
+            logger.warning(
+                "invalid_arguments: arguments must be dict, got %s",
+                type(arguments).__name__,
+            )
+            return ToolResult(
+                ok=False,
+                error=f"arguments must be dict, got {type(arguments).__name__}",
+                error_code="invalid_arguments",
+            )
+
+        # (3) JSON Schema 검증 (미리 컴파일된 Validator 재사용)
+        validator = self._validators[name]
+        errors = sorted(validator.iter_errors(arguments), key=lambda e: e.absolute_path)
+        if errors:
+            first = errors[0]
+            path = "/".join(str(p) for p in first.absolute_path) or "<root>"
+            msg = f"invalid_arguments at {path}: {first.message}"
+            logger.info("validation error for %s: %s", name, msg)
+            return ToolResult(
+                ok=False,
+                error=msg,
+                error_code="invalid_arguments",
+            )
+
+        # (4) 핸들러 분기 및 서비스 존재 체크
+        try:
+            if name == "add_event":
+                if self._calendar is None:
+                    return _service_unavail("add_event")
+                return await self._handle_add_event(arguments)
+
+            elif name == "get_events":
+                if self._calendar is None:
+                    return _service_unavail("get_events")
+                return await self._handle_get_events(arguments)
+
+            elif name == "search_docs":
+                if self._rag is None:
+                    return _service_unavail("search_docs")
+                return await self._handle_search_docs(arguments)
+
+            else:  # take_screenshot — screenshot은 None 금지(생성자에서 TypeError)
+                return await self._handle_take_screenshot(arguments)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception("Tool handler raised: %s", name)
+            return ToolResult(
+                ok=False,
+                error=f"{type(exc).__name__}: {exc}",
+                error_code="handler_exception",
+            )
+
+    # ------------------------------------------------------------------ #
+    # 내부 핸들러
+    # ------------------------------------------------------------------ #
+
+    async def _handle_add_event(self, args: dict[str, Any]) -> ToolResult:
+        """add_event 핸들러."""
+        start_str: str = args["start"]
+        start_dt = datetime.fromisoformat(start_str)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=_KST)
+
+        title: str = args["title"]
+        duration_minutes: int = args["duration_minutes"]
+        description: str | None = args.get("description")
+
+        event = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: self._calendar.add_event(title, start_dt, duration_minutes, description),
+        )
+
+        # event 객체를 payload로 직렬화
+        start_val = event.start
+        if isinstance(start_val, datetime):
+            start_val = start_val.isoformat()
+
+        payload: dict[str, Any] = {
+            "id": event.id,
+            "title": event.title,
+            "start": start_val,
+            "duration_minutes": event.duration_minutes,
+            "description": getattr(event, "description", None),
+        }
+        logger.info("add_event 성공: id=%s, title=%r", event.id, event.title)
+        return ToolResult(ok=True, payload=payload)
+
+    async def _handle_get_events(self, args: dict[str, Any]) -> ToolResult:
+        """get_events 핸들러."""
+        start_str: str = args["start"]
+        end_str: str = args["end"]
+        start_dt = datetime.fromisoformat(start_str)
+        end_dt = datetime.fromisoformat(end_str)
+
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=_KST)
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=_KST)
+
+        # start > end → 빈 리스트 반환 (CalendarService 호출 없음)
+        if start_dt > end_dt:
+            logger.info("get_events: start > end, 빈 결과 반환.")
+            return ToolResult(ok=True, payload={"count": 0, "events": []})
+
+        events = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: self._calendar.get_events(start_dt, end_dt),
+        )
+
+        serialized = []
+        for evt in events:
+            evt_start = evt.start
+            if isinstance(evt_start, datetime):
+                evt_start = evt_start.isoformat()
+            serialized.append(
+                {
+                    "id": evt.id,
+                    "title": evt.title,
+                    "start": evt_start,
+                    "duration_minutes": evt.duration_minutes,
+                    "description": getattr(evt, "description", None),
+                }
+            )
+
+        logger.info("get_events 성공: %d건 반환", len(serialized))
+        return ToolResult(ok=True, payload={"count": len(serialized), "events": serialized})
+
+    async def _handle_search_docs(self, args: dict[str, Any]) -> ToolResult:
+        """search_docs 핸들러."""
+        query: str = args["query"]
+        top_k: int = args.get("top_k", 8)  # JSON Schema default는 자동 주입 안 됨
+        category: str | None = args.get("category")
+
+        retrieval = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: self._rag.retrieve(query, top_k, category),
+        )
+
+        hits_payload = []
+        for hit in retrieval.hits:
+            citation = self._rag.format_citation(hit)
+            hits_payload.append(
+                {
+                    "doc_name": getattr(hit, "doc_name", None),
+                    "page": getattr(hit, "page", None),
+                    "section": getattr(hit, "section", None),
+                    "chunk_id": getattr(hit, "chunk_id", None),
+                    "text": getattr(hit, "text", ""),
+                    "score": float(getattr(hit, "score", 0.0)),
+                    "citation": citation,
+                }
+            )
+
+        no_match_reason: str | None = None
+        if not retrieval.found:
+            no_match_reason = (
+                getattr(retrieval, "no_match_reason", None)
+                or "등록된 문서에서 답을 찾지 못했습니다"
+            )
+            logger.info("search_docs: 결과 없음. query=%r", query)
+        else:
+            logger.info("search_docs 성공: %d건 반환", len(hits_payload))
+
+        return ToolResult(
+            ok=True,
+            payload={
+                "found": retrieval.found,
+                "no_match_reason": no_match_reason,
+                "hits": hits_payload,
+            },
+        )
+
+    async def _handle_take_screenshot(self, args: dict[str, Any]) -> ToolResult:
+        """take_screenshot 핸들러."""
+        continuous: bool = args.get("continuous", False)
+        interval: float = args.get("interval_seconds", 5.0)
+
+        if not continuous:
+            try:
+                data_url = await self._screenshot.capture_once()
+            except ScreenshotCaptureError as exc:
+                logger.error("take_screenshot 단건 캡처 실패: %s", exc)
+                return ToolResult(
+                    ok=False,
+                    error=str(exc),
+                    error_code="screenshot_failed",
+                )
+            return ToolResult(
+                ok=True,
+                payload={"mode": "single", "image": data_url},
+            )
+
+        # continuous=True
+        if self._screenshot.is_continuous_running:
+            logger.info("take_screenshot: 연속 모드 이미 실행 중.")
+            return ToolResult(
+                ok=True,
+                payload={
+                    "mode": "continuous",
+                    "state": "already_running",
+                    "interval_seconds": interval,
+                },
+            )
+
+        # 연속 모드 시작
+        try:
+            await self._screenshot.start_continuous(interval, on_frame=self._on_continuous_frame)
+        except asyncio.CancelledError:
+            # start_continuous가 create_task 이후 CancelledError를 받은 경우
+            # is_continuous_running이 True라면 task가 이미 생성된 것이므로 정리
+            if self._screenshot.is_continuous_running:
+                await self._screenshot.stop_continuous()
+            raise
+
+        return ToolResult(
+            ok=True,
+            payload={
+                "mode": "continuous",
+                "state": "started",
+                "interval_seconds": interval,
+            },
+        )
+
+    async def _on_continuous_frame(self, data_url: str) -> None:
+        """기본 연속 프레임 콜백 (log.debug만). M_01이 실제 on_frame을 주입한다."""
+        logger.debug("연속 캡처 프레임 수신: data_url 길이=%d", len(data_url))
