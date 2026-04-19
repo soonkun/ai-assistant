@@ -10,6 +10,7 @@ from loguru import logger
 from open_llm_vtuber.service_context import ServiceContext  # upstream
 
 from avatar_state import AvatarState
+from idle_monitor import IdleMonitor
 
 if TYPE_CHECKING:
     from .config import AppConfig
@@ -18,7 +19,6 @@ if TYPE_CHECKING:
     # 각 모듈 구현 완료 후 실제 타입으로 교체할 것.
     from typing import Any as RagService
     from typing import Any as CalendarService
-    from typing import Any as IdleMonitor
     from typing import Any as ProactiveDispatcher
     from tool_router import ScreenshotService, ToolRouter, ToolRouterAdapter
 
@@ -37,7 +37,7 @@ class AppServiceContext(ServiceContext):  # type: ignore[misc]
         # M_09 완료 후 주입
         self.calendar_service: "CalendarService | None" = None
         # M_10 완료 후 주입
-        self.idle_monitor: "IdleMonitor | None" = None
+        self.idle_monitor: IdleMonitor | None = None
         # M_08 완료 후 주입
         self.avatar_state: AvatarState | None = None
         # M_11 완료 후 주입
@@ -247,6 +247,18 @@ class AppServiceContext(ServiceContext):  # type: ignore[misc]
             self.tool_router = None
             self.tool_router_adapter = None
             logger.warning("screenshot_service가 None이므로 ToolRouter 조립 건너뜀")
+
+        # M-10: IdleMonitor 초기화 (스펙 §13.1)
+        try:
+            self.idle_monitor = IdleMonitor(
+                idle_threshold_min=app_config.proactive.idle_threshold_min,
+                overwork_threshold_min=app_config.proactive.overwork_threshold_min,
+                active_gap_seconds=app_config.proactive.active_gap_seconds,
+            )
+            logger.info("M_10 IdleMonitor initialized.")
+        except Exception as exc:
+            logger.warning(f"idle_monitor 초기화 실패: {exc}")
+            self.idle_monitor = None
 
         # 각 서비스는 해당 모듈 구현 완료 후 아래 형태로 추가:
         # try:

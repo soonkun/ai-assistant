@@ -350,9 +350,9 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 ### M_10 IdleMonitor (Windows 유휴 감지)
 
 - **분류**: NEW
-- **상태**: 🔲 TODO
-- **목적**: 마우스·키보드 입력 이벤트를 관찰해 유휴(`idle`)·과로(`overwork`) 상태 전이를 방출.
-- **공개 API**
+- **상태**: ✅ DONE (Critic PASS R2, 2026-04-19; R1 FAIL 이력은 reviews/M_10_*_REVIEW{,_R2}.md 참조)
+- **목적**: 마우스·키보드 입력 이벤트를 관찰해 유휴(`idle`)·과로(`overwork`) 상태 전이를 방출. **쿨다운·DND 정책은 M_11 책임**(specs/M_10 §D-1).
+- **공개 API** (specs/M_10 §4 결정 반영)
   ```python
   IdleEvent = Literal["idle_rest", "overwork"]
 
@@ -360,13 +360,19 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
       def __init__(self,
                    idle_threshold_min: int = 45,
                    overwork_threshold_min: int = 120,
-                   cooldown_min: int = 30,
-                   dnd_enabled: bool = False) -> None: ...
-      def start(self) -> None: ...
-      def stop(self) -> None: ...
+                   active_gap_seconds: int = 60,
+                   poll_interval_seconds: float = 1.0,
+                   clock: Callable[[], datetime] = datetime.now,
+                   backend: _IdleBackend | None = None) -> None: ...
+      def start(self) -> None: ...           # 멱등 (D-11)
+      async def stop(self) -> None: ...       # async (D-12)
       def set_dnd(self, enabled: bool) -> None: ...
-      def on_event(self, callback: Callable[[IdleEvent], Awaitable[None]]) -> None: ...
+      def on_event(self, callback: IdleEventCallback | None) -> None: ...   # 단일 슬롯, None 해제 (D-2)
+      def last_input_at(self) -> datetime: ...
+      def seconds_since_last_input(self) -> float: ...
+      def _tick(self, now: datetime) -> None: ...  # 테스트 가시 (D-12)
   ```
+  > **초안 대비 변경**: `cooldown_min`·`dnd_enabled` 생성자 인자 제거(D-1). `active_gap_seconds`/`poll_interval_seconds`/`clock`/`backend` DI 추가(D-12). 3계층 백엔드(PynputBackend→Win32IdleBackend→NoopBackend) 자동 폴백 — R-10 필수(D-9).
 - **에러**: `pynput` 훅 초기화 실패 → 로그 경고, 서비스 자체는 no-op로 계속 기동(기능 비활성).
 - **의존**: `pynput`, `asyncio`.
 
@@ -433,7 +439,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 | M_07 | VectorSearch | NEW | ✅ DONE | — |
 | M_08 | AvatarState | NEW | ✅ DONE | M_01 |
 | M_09 | CalendarService | NEW | ✅ DONE | specs/M_09_CalendarService_SPEC.md |
-| M_10 | IdleMonitor | NEW | 🔲 TODO | — |
+| M_10 | IdleMonitor | NEW | ✅ DONE | — |
 | M_11 | ProactiveDispatcher | NEW | 🔲 TODO | M_09, M_10 |
 | M_12 | Frontend | FORK+NEW | 🔲 TODO | M_01 메시지 스키마 |
 

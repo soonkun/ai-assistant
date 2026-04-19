@@ -103,6 +103,38 @@ class AgentConfig(BaseModel):
     use_mcpp: bool = Field(default=True)
 
 
+class ProactiveConfig(BaseModel):
+    """프로액티브 알림 관련 설정 (M_10 IdleMonitor + M_11 ProactiveDispatcher 공용).
+
+    스펙 M_10 §13.1 / §16.1 — conf.yaml proactive 섹션 3개 필드.
+    """
+
+    idle_threshold_min: int = Field(
+        default=45,
+        ge=1,
+        le=1440,
+        description="유휴 판정 임계값(분). 마지막 입력 이후 이 분수 이상 무입력 시 idle_rest 방출.",
+    )
+    overwork_threshold_min: int = Field(
+        default=120,
+        ge=1,
+        le=1440,
+        description="연속 활동 임계값(분). active_gap_seconds 이내 연속 입력이 이 분수 이상 지속 시 overwork 방출.",
+    )
+    active_gap_seconds: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        description="연속 활동 판정 간격(초). 마지막 입력 이후 이 초 이하이면 '계속 활동 중'으로 간주.",
+    )
+    cooldown_min: int = Field(
+        default=30,
+        ge=1,
+        le=1440,
+        description="M_11 ProactiveDispatcher 쿨다운(분). 동일 이벤트 재발행 억제.",
+    )
+
+
 class AppConfig(BaseModel):
     """본 프로젝트 고유 설정.
 
@@ -115,9 +147,7 @@ class AppConfig(BaseModel):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
     tts: TtsConfig = Field(default_factory=TtsConfig)
-    idle_threshold_min: int = Field(default=45, ge=1, le=600)
-    overwork_threshold_min: int = Field(default=120, ge=10, le=1440)
-    proactive_cooldown_min: int = Field(default=30, ge=1, le=1440)
+    proactive: ProactiveConfig = Field(default_factory=ProactiveConfig)
     morning_briefing_time: str = Field(default="09:00")
     dnd_enabled: bool = Field(default=False)
     rag_min_score: float = Field(default=0.35, ge=0.0, le=1.0)

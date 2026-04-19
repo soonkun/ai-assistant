@@ -64,4 +64,5 @@ character_config:
       translate_provider: "deeplx"
 
 app:
-  idle_threshold_min: 10
+  proactive:
+    idle_threshold_min: 10

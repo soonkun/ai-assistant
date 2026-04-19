@@ -38,8 +38,8 @@ class TestLoadFullConfig:
     # ── E-1: app 일부 필드 누락 → 기본값으로 채워짐 ─────────────────
     def test_e1_missing_app_fields_use_defaults(self, missing_app_config_path: str) -> None:
         config = load_full_config(missing_app_config_path)
-        # idle_threshold_min은 10 (YAML 명시값)
-        assert config.app.idle_threshold_min == 10
+        # proactive.idle_threshold_min은 10 (YAML 명시값)
+        assert config.app.proactive.idle_threshold_min == 10
         # 나머지는 기본값
         assert config.app.ollama.base_url == "http://127.0.0.1:11434"
         assert config.app.paths.data_dir == "data"
@@ -71,14 +71,36 @@ class TestAppConfig:
         assert cfg.profile == HardwareProfile.MIN
         assert cfg.ollama.base_url == "http://127.0.0.1:11434"
         assert cfg.paths.data_dir == "data"
-        assert cfg.idle_threshold_min == 45
+        assert cfg.proactive.idle_threshold_min == 45
         assert cfg.rag_min_score == 0.35
 
-    def test_idle_threshold_boundary(self) -> None:
-        cfg = AppConfig(idle_threshold_min=1)  # type: ignore[call-arg]
-        assert cfg.idle_threshold_min == 1
+    def test_proactive_config_has_active_gap_seconds(self) -> None:
+        """ProactiveConfig에 active_gap_seconds 필드가 존재하고 기본값이 60."""
+        from app.config import ProactiveConfig
+
+        pc = ProactiveConfig()
+        assert pc.active_gap_seconds == 60
+
+    def test_proactive_config_idle_threshold_boundary(self) -> None:
+        """ProactiveConfig.idle_threshold_min 경계값 — ge=1, le=1440."""
+        from app.config import ProactiveConfig
+
+        pc = ProactiveConfig(idle_threshold_min=1)
+        assert pc.idle_threshold_min == 1
+        pc1440 = ProactiveConfig(idle_threshold_min=1440)
+        assert pc1440.idle_threshold_min == 1440
         with pytest.raises(ValidationError):
-            AppConfig(idle_threshold_min=0)  # type: ignore[call-arg]
+            ProactiveConfig(idle_threshold_min=0)
+        with pytest.raises(ValidationError):
+            ProactiveConfig(idle_threshold_min=1441)
+
+    def test_idle_threshold_boundary(self) -> None:
+        from app.config import ProactiveConfig
+
+        pc = ProactiveConfig(idle_threshold_min=1)
+        assert pc.idle_threshold_min == 1
+        with pytest.raises(ValidationError):
+            ProactiveConfig(idle_threshold_min=0)
 
     def test_rag_min_score_boundary(self) -> None:
         cfg = AppConfig(rag_min_score=0.0)  # type: ignore[call-arg]

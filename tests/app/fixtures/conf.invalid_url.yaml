@@ -77,9 +77,11 @@ app:
     calendar_db_path: "data/calendar.db"
     chat_history_dir: "data/chat_history"
     log_dir: "data/logs"
-  idle_threshold_min: 45
-  overwork_threshold_min: 120
-  proactive_cooldown_min: 30
+  proactive:
+    idle_threshold_min: 45
+    overwork_threshold_min: 120
+    active_gap_seconds: 60
+    cooldown_min: 30
   morning_briefing_time: "09:00"
   dnd_enabled: false
   rag_min_score: 0.35

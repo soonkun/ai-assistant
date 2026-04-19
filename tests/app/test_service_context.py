@@ -207,6 +207,128 @@ class TestAppServiceContextClose:
             await ctx.close()  # 예외 없음
 
 
+class TestM10IdleMonitorWiring:
+    """M-10: IdleMonitor 주입 회귀 테스트."""
+
+    @pytest.mark.asyncio
+    async def test_idle_monitor_none_before_load_app_services(self) -> None:
+        """__init__ 직후 idle_monitor는 None (load_app_services 호출 전 상태)."""
+        ctx = _make_ctx_raw()
+        assert ctx.idle_monitor is None
+
+    @pytest.mark.asyncio
+    async def test_idle_monitor_injected_on_load_app_services(self) -> None:
+        """load_app_services 후 idle_monitor는 IdleMonitor 인스턴스.
+
+        실제 훅(pynput/Win32)은 unittest.mock.patch로 차단 — FakeBackend 주입 없이
+        IdleMonitor 생성자 호출만 확인.
+        """
+        import sys
+
+        from idle_monitor import IdleMonitor
+
+        ctx = _make_ctx_raw()
+        app_cfg = AppConfig()  # type: ignore[call-arg]
+
+        mock_tool_module = MagicMock()
+
+        class _FakeSSInitError(Exception):
+            pass
+
+        mock_tool_module.ScreenshotService = MagicMock(side_effect=_FakeSSInitError("비-Windows"))
+        mock_tool_module.ScreenshotInitError = _FakeSSInitError
+        mock_tool_module.ToolRouter = MagicMock()
+        mock_tool_module.ToolRouterAdapter = MagicMock()
+
+        with patch.dict(sys.modules, {"tool_router": mock_tool_module}):
+            await ctx.load_app_services(app_cfg)
+
+        assert isinstance(ctx.idle_monitor, IdleMonitor), (
+            f"idle_monitor가 IdleMonitor 인스턴스가 아님: {ctx.idle_monitor!r}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_idle_monitor_start_called_in_event_loop(self) -> None:
+        """load_app_services 후 IdleMonitor.start()가 이벤트 루프 내에서 호출 가능.
+
+        start()는 main.py startup hook에서 호출되지만 여기서는 생성만 확인 후
+        수동 start()가 성공하는지 검증 (실제 훅은 NoopBackend/FakeBackend로 회피).
+        """
+        import sys
+
+        from idle_monitor import IdleMonitor
+        from idle_monitor.backends.noop_backend import NoopBackend
+
+        ctx = _make_ctx_raw()
+        app_cfg = AppConfig()  # type: ignore[call-arg]
+
+        mock_tool_module = MagicMock()
+
+        class _FakeSSInitError(Exception):
+            pass
+
+        mock_tool_module.ScreenshotService = MagicMock(side_effect=_FakeSSInitError("비-Windows"))
+        mock_tool_module.ScreenshotInitError = _FakeSSInitError
+        mock_tool_module.ToolRouter = MagicMock()
+        mock_tool_module.ToolRouterAdapter = MagicMock()
+
+        with patch.dict(sys.modules, {"tool_router": mock_tool_module}):
+            await ctx.load_app_services(app_cfg)
+
+        assert isinstance(ctx.idle_monitor, IdleMonitor)
+
+        # _select_backend가 NoopBackend를 반환하도록 patch (비-Windows) 또는
+        # 실제 비-Windows 환경에서는 자동으로 NoopBackend 선택
+        with patch(
+            "idle_monitor.backends._select_backend",
+            return_value=NoopBackend(),
+        ):
+            ctx.idle_monitor.start()  # 예외 없음
+
+        await ctx.idle_monitor.stop()  # 정리
+
+    @pytest.mark.asyncio
+    async def test_idle_monitor_active_gap_seconds_wired(self) -> None:
+        """load_app_services 후 IdleMonitor._active_gap_seconds가 ProactiveConfig 값과 일치.
+
+        스펙 §13.1 / §16.1 — active_gap_seconds 포함 3개 파라미터 모두 전달 검증.
+        """
+        import sys
+
+        from app.config import ProactiveConfig
+        from idle_monitor import IdleMonitor
+
+        ctx = _make_ctx_raw()
+        # active_gap_seconds=120으로 기본값(60)과 다른 값 사용 → 배선 누락 시 실패
+        app_cfg = AppConfig(  # type: ignore[call-arg]
+            proactive=ProactiveConfig(
+                idle_threshold_min=30,
+                overwork_threshold_min=90,
+                active_gap_seconds=120,
+            )
+        )
+
+        mock_tool_module = MagicMock()
+
+        class _FakeSSInitError(Exception):
+            pass
+
+        mock_tool_module.ScreenshotService = MagicMock(side_effect=_FakeSSInitError("비-Windows"))
+        mock_tool_module.ScreenshotInitError = _FakeSSInitError
+        mock_tool_module.ToolRouter = MagicMock()
+        mock_tool_module.ToolRouterAdapter = MagicMock()
+
+        with patch.dict(sys.modules, {"tool_router": mock_tool_module}):
+            await ctx.load_app_services(app_cfg)
+
+        assert isinstance(ctx.idle_monitor, IdleMonitor)
+        assert ctx.idle_monitor._active_gap_seconds == 120, (  # type: ignore[attr-defined]
+            f"active_gap_seconds가 120이어야 하지만 {ctx.idle_monitor._active_gap_seconds!r}"  # type: ignore[attr-defined]
+        )
+        assert ctx.idle_monitor._idle_threshold_min == 30  # type: ignore[attr-defined]
+        assert ctx.idle_monitor._overwork_threshold_min == 90  # type: ignore[attr-defined]
+
+
 class TestM09CalendarServiceWiring:
     """M-09: CalendarService 주입 회귀 테스트."""
 
