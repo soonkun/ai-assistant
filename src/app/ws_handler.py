@@ -34,10 +34,11 @@ class ContinuousCaptureTask:
 class AppWebSocketHandler(WebSocketHandler):  # type: ignore[misc]
     """upstream WebSocketHandler 서브클래스.
 
-    신규 메시지 타입 3종 추가:
+    신규 메시지 타입 4종 추가:
     - screenshot-trigger
     - start-continuous-capture
     - stop-continuous-capture
+    - set-dnd
     """
 
     def __init__(self, default_context_cache: AppServiceContext) -> None:
@@ -54,6 +55,7 @@ class AppWebSocketHandler(WebSocketHandler):  # type: ignore[misc]
                 "screenshot-trigger": self._handle_screenshot_trigger,
                 "start-continuous-capture": self._handle_start_continuous_capture,
                 "stop-continuous-capture": self._handle_stop_continuous_capture,
+                "set-dnd": self._handle_set_dnd,
             }
         )
         return handlers  # type: ignore[no-any-return]
@@ -224,6 +226,48 @@ class AppWebSocketHandler(WebSocketHandler):  # type: ignore[misc]
             await self._cancel_continuous_task(client_uid)
         logger.info(f"연속 캡처 중단: client={client_uid}")
         await websocket.send_json({"type": "continuous-capture-state", "running": False})
+
+    async def _handle_set_dnd(
+        self,
+        websocket: WebSocket,
+        client_uid: str,
+        data: dict,  # type: ignore[type-arg]
+    ) -> None:
+        """B-4. set-dnd: DND(방해 금지) 상태 설정 (CR-10).
+
+        스펙 §B-4 핸들러 동작 4단계를 엄격하게 구현한다:
+        1. enabled bool 타입 검사 (int 1/0 포함 거부 — type() is bool 검사).
+        2. proactive_dispatcher None 방어.
+        3. dispatcher.set_dnd(enabled) 동기 호출, 예외 격리(WS 연결 유지).
+        4. 성공 시 dnd-state 응답 송신.
+        """
+        enabled = data.get("enabled")
+
+        # 1. 엄격 bool 검사: Python bool은 int의 서브클래스이므로 type() is bool 사용
+        if type(enabled) is not bool:
+            logger.warning("set-dnd payload invalid: enabled=%r", enabled)
+            await websocket.send_json({"type": "error", "message": "set-dnd: enabled must be bool"})
+            return
+
+        # 2. proactive_dispatcher None 방어
+        dispatcher = self._app_ctx.proactive_dispatcher
+        if dispatcher is None:
+            logger.warning("set-dnd dropped: proactive_dispatcher not initialized")
+            await websocket.send_json(
+                {"type": "error", "message": "set-dnd: proactive_dispatcher not initialized"}
+            )
+            return
+
+        # 3. sync 호출 — await 금지 (M_11 §4 def set_dnd(self, enabled: bool) -> None:)
+        try:
+            dispatcher.set_dnd(enabled)
+        except Exception as exc:
+            logger.error("set-dnd dispatcher failed: %s", exc)
+            await websocket.send_json({"type": "error", "message": "set-dnd: dispatcher failed"})
+            return
+
+        # 4. 성공 응답: 프런트 토글 UI의 SSoT 경로
+        await websocket.send_json({"type": "dnd-state", "enabled": enabled})
 
     # ------------------------------------------------------------------ #
     #  내부 유틸                                                            #

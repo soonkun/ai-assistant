@@ -1,5 +1,5 @@
 # tests/app/test_ws_handler.py
-"""AppWebSocketHandler 신규 3종 메시지 핸들러 테스트."""
+"""AppWebSocketHandler 신규 4종 메시지 핸들러 테스트."""
 
 from __future__ import annotations
 
@@ -71,6 +71,7 @@ class TestInitMessageHandlers:
         assert "screenshot-trigger" in handlers
         assert "start-continuous-capture" in handlers
         assert "stop-continuous-capture" in handlers
+        assert "set-dnd" in handlers  # CR-10
 
     def test_n4_upstream_handlers_preserved(self) -> None:
         handler, _ = _make_handler()
@@ -612,3 +613,213 @@ class TestContinuousLoopFailure:
         assert "continuous capture failed 3 times" in msg["message"]
         # 3회 캡처 시도 확인
         assert svc.capture_once.call_count == 3
+
+
+# ── set-dnd 핸들러 테스트 (CR-10: N-12, E-10, E-11, A-8) ──
+# 기존 test_ws_handler.py에 추가 — 파일 규모(615줄)가 이미 크나
+# set-dnd는 ws_handler.py 동일 파일의 핸들러이므로 분리보다 통합이 응집성에 유리하다.
+
+from proactive.dispatcher import ProactiveDispatcher  # noqa: E402
+
+
+def _make_handler_with_dispatcher(
+    dispatcher: MagicMock | None,
+) -> tuple[AppWebSocketHandler, MagicMock]:
+    """proactive_dispatcher를 주입한 핸들러 생성 헬퍼."""
+    handler, ctx = _make_handler()
+    ctx.proactive_dispatcher = dispatcher
+    handler._app_ctx = ctx
+    return handler, ctx
+
+
+class TestSetDnd:
+    """set-dnd 핸들러 테스트 — N-12 / E-10 / E-11 / A-8."""
+
+    @pytest.mark.asyncio
+    async def test_n12_set_dnd_true_success(self) -> None:
+        """N-12: set-dnd(true) 정상 처리.
+
+        - dispatcher.set_dnd(True) 1회 동기 호출.
+        - dnd-state {enabled: true} 송신.
+        - error 메시지 미송신.
+        """
+        mock_dispatcher = MagicMock(spec=ProactiveDispatcher)
+        handler, ctx = _make_handler_with_dispatcher(mock_dispatcher)
+        ws = _make_websocket()
+
+        await handler._handle_set_dnd(ws, "uid1", {"type": "set-dnd", "enabled": True})
+
+        # dispatcher.set_dnd 1회 호출, 인자 True
+        mock_dispatcher.set_dnd.assert_called_once_with(True)
+
+        # dnd-state 응답 검증
+        ws.send_json.assert_called_once()
+        msg = ws.send_json.call_args[0][0]
+        assert msg == {"type": "dnd-state", "enabled": True}
+
+    @pytest.mark.asyncio
+    async def test_e10_enabled_string_rejected(self) -> None:
+        """E-10: enabled="true"(문자열) → dispatcher 미호출, error 송신.
+
+        bool이 아닌 문자열은 type(enabled) is not bool 검사로 거부.
+        """
+        mock_dispatcher = MagicMock(spec=ProactiveDispatcher)
+        handler, ctx = _make_handler_with_dispatcher(mock_dispatcher)
+        ws = _make_websocket()
+
+        # loguru warning 캡처
+        from loguru import logger as loguru_logger
+
+        captured_warnings: list[str] = []
+
+        def _sink(message: object) -> None:
+            record = message.record  # type: ignore[union-attr]
+            if record["level"].name == "WARNING":
+                captured_warnings.append(record["message"])
+
+        sink_id = loguru_logger.add(_sink, level="WARNING")
+        try:
+            await handler._handle_set_dnd(ws, "uid1", {"type": "set-dnd", "enabled": "true"})
+        finally:
+            loguru_logger.remove(sink_id)
+
+        # dispatcher 미호출
+        mock_dispatcher.set_dnd.assert_not_called()
+
+        # error 메시지 송신 검증
+        ws.send_json.assert_called_once()
+        msg = ws.send_json.call_args[0][0]
+        assert msg["type"] == "error"
+        assert msg["message"] == "set-dnd: enabled must be bool"
+
+        # dnd-state 미송신 (error만 1회)
+        assert ws.send_json.call_count == 1
+
+        # logger.warning 1회 기록 검증
+        assert len(captured_warnings) >= 1, (
+            f"warning 로그 미발생. 캡처된 WARNING: {captured_warnings}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_e10_enabled_int_rejected(self) -> None:
+        """E-10 추가: enabled=1(int) → bool이 아니므로 거부.
+
+        Python에서 isinstance(1, bool)은 False이지만
+        type(1) is not bool로 int 1/0도 명시적으로 거부함을 검증.
+        """
+        mock_dispatcher = MagicMock(spec=ProactiveDispatcher)
+        handler, ctx = _make_handler_with_dispatcher(mock_dispatcher)
+        ws = _make_websocket()
+
+        await handler._handle_set_dnd(ws, "uid1", {"type": "set-dnd", "enabled": 1})
+
+        mock_dispatcher.set_dnd.assert_not_called()
+        msg = ws.send_json.call_args[0][0]
+        assert msg["type"] == "error"
+        assert msg["message"] == "set-dnd: enabled must be bool"
+
+    @pytest.mark.asyncio
+    async def test_e11_dispatcher_none_sends_error(self) -> None:
+        """E-11: proactive_dispatcher=None → error 송신, dnd-state 미송신.
+
+        dispatcher가 None인 상태에서 set-dnd 수신 시
+        WS 연결 유지 + error 응답 검증.
+        """
+        handler, ctx = _make_handler_with_dispatcher(None)
+        ws = _make_websocket()
+
+        from loguru import logger as loguru_logger
+
+        captured_warnings: list[str] = []
+
+        def _sink(message: object) -> None:
+            record = message.record  # type: ignore[union-attr]
+            if record["level"].name == "WARNING":
+                captured_warnings.append(record["message"])
+
+        sink_id = loguru_logger.add(_sink, level="WARNING")
+        try:
+            await handler._handle_set_dnd(ws, "uid1", {"type": "set-dnd", "enabled": True})
+        finally:
+            loguru_logger.remove(sink_id)
+
+        # error 메시지 검증
+        ws.send_json.assert_called_once()
+        msg = ws.send_json.call_args[0][0]
+        assert msg["type"] == "error"
+        assert msg["message"] == "set-dnd: proactive_dispatcher not initialized"
+
+        # dnd-state 미송신
+        assert ws.send_json.call_count == 1
+
+        # logger.warning 기록 검증
+        assert len(captured_warnings) >= 1, (
+            f"warning 로그 미발생. 캡처된 WARNING: {captured_warnings}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a8_set_dnd_spam_100(self) -> None:
+        """A-8: set-dnd 스팸 100회 — 드롭 없이 모두 처리, 상태 일관성 검증.
+
+        true/false를 교차로 100회 전송:
+        - dispatcher.set_dnd.call_count == 100.
+        - 크래시·예외 없음.
+        - 최종 dnd-state enabled 값 == 마지막 set_dnd 호출 인자.
+        """
+        mock_dispatcher = MagicMock(spec=ProactiveDispatcher)
+        handler, ctx = _make_handler_with_dispatcher(mock_dispatcher)
+        ws = _make_websocket()
+
+        # 100회 교차 송신 (sleep 없음)
+        for i in range(100):
+            enabled = i % 2 == 0  # True, False, True, False, ...
+            await handler._handle_set_dnd(ws, "uid1", {"type": "set-dnd", "enabled": enabled})
+
+        # call_count == 100 검증
+        assert mock_dispatcher.set_dnd.call_count == 100, (
+            f"dispatcher.set_dnd 호출 횟수={mock_dispatcher.set_dnd.call_count}, 100이어야 함"
+        )
+
+        # 최종 dnd-state 응답의 enabled == 마지막 set_dnd 호출 인자 (상태 일관)
+        # 100번째 인덱스는 99 → 99 % 2 == 1 → False
+        last_enabled = 99 % 2 == 0  # False
+        last_call_arg = mock_dispatcher.set_dnd.call_args[0][0]
+        assert last_call_arg == last_enabled, (
+            f"마지막 set_dnd 호출 인자={last_call_arg}, 예상={last_enabled}"
+        )
+
+        # 마지막 send_json 호출 (100번째 dnd-state)이 last_enabled와 일치
+        last_send = ws.send_json.call_args_list[-1][0][0]
+        assert last_send == {"type": "dnd-state", "enabled": last_enabled}, (
+            f"마지막 dnd-state 응답={last_send}, 예상={{enabled:{last_enabled}}}"
+        )
+
+        # send_json 총 100회 (error 없음)
+        assert ws.send_json.call_count == 100, (
+            f"send_json 호출 횟수={ws.send_json.call_count}, 100이어야 함 (error 송신 없어야 함)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_dispatcher_exception_sends_error_and_keeps_ws(self) -> None:
+        """스펙 §B-4 §§핸들러 동작 3: dispatcher.set_dnd() 예외 발생 시 격리 검증.
+
+        - error 메시지("set-dnd: dispatcher failed") 송신.
+        - dnd-state 미송신 (예외 발생 직후 return).
+        - 예외 재전파 없음 (WS 연결 유지 — 호출 완료가 곧 증명).
+        """
+        mock_dispatcher = MagicMock(spec=ProactiveDispatcher)
+        mock_dispatcher.set_dnd.side_effect = RuntimeError("scheduler crashed")
+        handler, ctx = _make_handler_with_dispatcher(mock_dispatcher)
+        ws = _make_websocket()
+
+        # 예외가 전파되면 여기서 pytest.raises로 잡힘 — 정상이면 그냥 완료
+        await handler._handle_set_dnd(ws, "uid1", {"type": "set-dnd", "enabled": True})
+
+        # error 메시지 검증
+        ws.send_json.assert_called_once()
+        msg = ws.send_json.call_args[0][0]
+        assert msg["type"] == "error"
+        assert msg["message"] == "set-dnd: dispatcher failed"
+
+        # dnd-state 미송신 (1회만 호출됨, error 뿐)
+        assert ws.send_json.call_count == 1
