@@ -8,7 +8,7 @@
 > - `docs/MODULES.md` L420~L439(M_12 초안: 분류/상태/목적/주요 책임/공개 API 시그니처/의존).
 > - `docs/research/frontend_structure.md` L3~L15(서브모듈 비어 있음, `.gitmodules` url·branch=build), L28~L84(WS 메시지 타입 표), L86~L112(펫 모드·드래그 이동 구현 미확인).
 > - `docs/CHARACTER_SAESSAGI.md` L5~L17(파일 배치 — `assets/character/saessagi/<emotion>.png` 8종 확정), L21~L34(표정 표), L46~L53(아이들 애니메이션: 숨쉬기/깜빡임/흔들림/바운스), L55~L68(감정 태그 프로토콜 — `_SPOKEN_EMOTIONS` 7종과 `study` 시스템 감정 분리).
-> - `specs/M_01_AppCore_SPEC.md` §"WebSocket 메시지 타입"(L370~L475) — upstream REUSE 20종 + 신규 수신 3종(`screenshot-trigger`·`start-continuous-capture`·`stop-continuous-capture`) + 신규 송신 3종(`continuous-capture-state`·`avatar-state`·`proactive-notification`), L411~L474 payload 계약.
+> - `specs/M_01_AppCore_SPEC.md` §"WebSocket 메시지 타입"(L370~L505) — upstream REUSE 20종 + 신규 수신 4종(`screenshot-trigger`·`start-continuous-capture`·`stop-continuous-capture`·`set-dnd`) + 신규 송신 3종(`continuous-capture-state`·`avatar-state`·`dnd-state`), L411~L504 payload 계약. CR-10·CR-11 반영 완료.
 > - `specs/M_08_AvatarState_SPEC.md` §4.1(Emotion Literal 8종, `_SPOKEN_EMOTIONS` 7종/`_VALID_EMOTIONS` 8종 분리), §6.3 D-3(백엔드가 1차 폴백 — 프론트는 서버가 준 키를 그대로 렌더하되 에셋 미보유 시 `neutral.png` 2차 폴백만 수행), §7(송신 페이로드 `{type:"avatar-state", emotion, crossfade_ms, speaking}`).
 > - `specs/M_11_ProactiveDispatcher_SPEC.md` §1.3 #2(프론트 팝업 UI는 M_12 책임), §7.1/§7.3(payload: `{type:"ai-speak-signal", text, topic∈{morning_briefing,event_reminder,idle_rest,overwork}, context}`), §8.2 D-13(마지막 활성 클라이언트 단일 송신).
 > - `docs/E2E_SCENARIOS.md` §E2E-01/07/31(`avatar-state` 프레임 수신·감정 태그 7종), §E2E-05/06/09/24/25(`ai-speak-signal` topic별 프레임), §E2E-26(세션 미형성 시 `screenshot-trigger` 친화 에러), §Q-3(UI 골든패스 미확정), §617(펫 모드·IdleMonitor는 E2E 범위 외 — 수동 QA).
@@ -75,7 +75,7 @@
 upstream React 컴포넌트 중 **교체 대상**은 다음 범주뿐이다:
 
 1. `components/avatar/*` 또는 upstream Live2D 진입점 — 본 프로젝트의 `components/Avatar/SpriteAvatarRenderer.tsx`로 치환.
-2. WebSocket 이벤트 dispatcher — 신규 3종 송신/수신 타입(`screenshot-trigger`, `start-continuous-capture`, `stop-continuous-capture`, `avatar-state`, `proactive-notification`, `continuous-capture-state`) 핸들러 추가.
+2. WebSocket 이벤트 dispatcher — 신규 타입 핸들러 추가. 수신(클라→서버) 4종(`screenshot-trigger`, `start-continuous-capture`, `stop-continuous-capture`, `set-dnd`) + 송신(서버→클라) 3종(`avatar-state`, `continuous-capture-state`, `dnd-state`). CR-10·CR-11 반영.
 3. Electron main 프로세스 엔트리 — 기본 브라우저 창 외에 `PetWindow` 추가 생성 로직.
 4. 설정 패널 — DND 토글·화면 공유 토글·프로파일 선택(min/recommended)의 UI 노출.
 
@@ -244,23 +244,24 @@ upstream 채널을 그대로 쓰되 신규 메시지 타입 6종만 추가한다
 > **제약 (§7.0)**: 본 모듈은 메시지 타입을 **추가하지 않는다**. `specs/M_01_AppCore_SPEC.md` §"WebSocket 메시지 타입"에 정의된 타입만 사용한다. 신규 타입이 필요하면 `docs/CHANGE_REQUESTS.md`에 CR을 올린 뒤 M_01 스펙을 먼저 갱신해야 한다.
 
 ### §7.1 클라이언트 → 서버
-upstream 21종(`M_01_AppCore_SPEC.md` L376~L407)을 전부 보존. 본 프로젝트 신규 3종:
+upstream 21종(`M_01_AppCore_SPEC.md` L376~L407)을 전부 보존. 본 프로젝트 신규 4종(CR-10 set-dnd 포함):
 
 | type | 페이로드 | 트리거 |
 |---|---|---|
-| `screenshot-trigger` | `{type, prompt?:str, monitor_index?:int=0, region?:null}` (M_01 §B-1 L411~L432) | 화면 공유 버튼 클릭 / 음성 의도 |
-| `start-continuous-capture` | `{type, interval_sec?:int, monitor_index?:int, prompt_template?:str}` (M_01 §B-2 L434~L452) | 연속 모드 토글 ON + 개인정보 경고 모달 확인 후 |
-| `stop-continuous-capture` | `{type}` (M_01 §B-3 L454~L464) | 연속 모드 토글 OFF |
+| `screenshot-trigger` | `{type, prompt?:str, monitor_index?:int=0, region?:null}` (M_01 §B-1) | 화면 공유 버튼 클릭 / 음성 의도 |
+| `start-continuous-capture` | `{type, interval_sec?:int, monitor_index?:int, prompt_template?:str}` (M_01 §B-2) | 연속 모드 토글 ON + 개인정보 경고 모달 확인 후 |
+| `stop-continuous-capture` | `{type}` (M_01 §B-3) | 연속 모드 토글 OFF |
+| `set-dnd` | `{type, enabled:bool}` (M_01 §B-4, CR-10) | 설정 패널 DND 토글. 성공 시 서버가 `dnd-state` 응답을 송신하여 UI가 그 응답 기준으로 최종 상태를 반영(SSoT). |
 
 ### §7.2 서버 → 클라이언트
-upstream 19종 + 본 프로젝트 신규 3종:
+upstream 19종 + 본 프로젝트 신규 3종(CR-10 `dnd-state` 반영. CR-11로 예약 해제된 타입은 §19 Q-11 참조):
 
 | type | 페이로드 | 프론트 처리 |
 |---|---|---|
 | `avatar-state` | `{type,emotion:Emotion,crossfade_ms:int,speaking:bool}` (M_08 §7) | `AvatarRenderer.setEmotion/setSpeaking` 호출. `emotion`이 8종 밖이면 `neutral` 폴백 + onError. `crossfade_ms` 범위 밖(< 200 or > 300)이면 **에러 로깅 후 무시**(§10.2). |
-| `proactive-notification` | `{type, topic, title, body}` (M_01 L472 예약; 필드 확정은 M_11에서 하지 않았으므로 본 스펙은 송신 측 확정 대기 — Q-11) | 토스트 렌더. 백엔드 M_11이 이 타입을 **실제로는 송신하지 않고** `ai-speak-signal`로 통일(§7.3 참조). |
 | `continuous-capture-state` | `{type, running:bool, interval_sec?:int}` (M_01 §C) | 설정 패널의 연속 모드 ON 표시 동기화. |
-| `ai-speak-signal` | 서버가 먼저 보낼 때(`{text, topic, context}`; M_11 §7) | **프런트는 프로액티브 토스트 표시 + 응답 대기 UI로 전환**. 실제 TTS 음성은 이후 `audio` 프레임으로 들어오므로 기존 upstream 경로 유지. |
+| `dnd-state` | `{type, enabled:bool}` (M_01 §C, CR-10) | 설정 패널 DND 토글의 단일 진실 소스(SSoT). `set-dnd` 요청에 대한 서버 응답 수신 시 토글 상태 확정. |
+| `ai-speak-signal` | 서버가 먼저 보낼 때(`{text, topic, context}`; M_11 §7) | **프런트는 프로액티브 토스트 표시 + 응답 대기 UI로 전환**. 실제 TTS 음성은 이후 `audio` 프레임으로 들어오므로 기존 upstream 경로 유지. 프로액티브 토스트 경로는 이 타입 **단일**로 통일됨(CR-11). M_11은 본 타입만 사용(§7.3, `specs/M_11_ProactiveDispatcher_SPEC.md` §7.3). |
 
 ### §7.3 `ai-speak-signal` 역방향 처리 계약
 upstream에선 `ai-speak-signal`이 **클라이언트 → 서버** 방향의 수신 타입으로 정의된다(`frontend_structure.md` L46; `websocket_handler.py` L91). 본 프로젝트는 M_11이 **서버 → 클라이언트** 방향으로 동일 타입을 **재사용**한다(`M_11_ProactiveDispatcher_SPEC.md` §7, ARCHITECTURE L170). 프론트는 수신 측 처리로서:

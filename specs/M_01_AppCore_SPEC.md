@@ -499,10 +499,11 @@ N초 간격 반복 캡처 시작. 시작 시 사용자에게 개인정보 경고
 |---|---|---|
 | `continuous-capture-state` | 송신 | `{running: bool, interval_sec?: int}` |
 | `avatar-state` | 송신 | M_08에서 발송. M_01은 타입만 예약 (`{emotion, crossfade_ms, speaking}`) |
-| `proactive-notification` | 송신 | M_11에서 발송. M_01은 타입만 예약 (`{topic, title, body}`) |
 | `dnd-state` | 송신 | `{enabled: bool}`. set-dnd 처리 결과. 프런트 토글 UI의 단일 진실 소스(SSoT) 경로. (CR-10) |
 
-> M_08·M_11 스펙에서 구체 필드 확정. M_01은 **이 네 타입을 프론트가 수신 가능한 것으로 문서화**만 한다. `dnd-state`는 M_01의 `_handle_set_dnd` 핸들러가 직접 송신한다(B-4 §§핸들러 동작 4단계).
+> M_08·M_11 스펙에서 구체 필드 확정. M_01은 **이 세 타입을 프론트가 수신 가능한 것으로 문서화**만 한다. `dnd-state`는 M_01의 `_handle_set_dnd` 핸들러가 직접 송신한다(B-4 §§핸들러 동작 4단계).
+
+> CR-11 승인(2026-04-21)으로 제거. 사유: specs/M_12_Frontend_SPEC.md §19 Q-11. M_11은 ai-speak-signal만 송신(specs/M_11_ProactiveDispatcher_SPEC.md §7.3).
 
 ---
 

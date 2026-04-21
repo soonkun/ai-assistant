@@ -39,7 +39,7 @@ Windows 10/11 단일 사용자 PC에서 키보드·마우스 입력의 **유무*
 
 1. **쿨다운 적용**: 동일 이벤트(`idle_rest`/`overwork`)를 N분 내 재발행 금지 — **M_11 ProactiveDispatcher**의 책임(`cooldown_min=30` 파라미터). 근거: §6.3 D-1. 본 모듈은 "상태 전이 이벤트의 진실 공급원"만 제공한다.
 2. **방해 금지(DND) 이벤트 드롭**: 본 스펙은 `set_dnd(enabled)`를 **제공**하되, DND가 `True`면 콜백 호출 자체를 **건너뛴다**(리소스 절약, §6.3 D-3). M_11도 자체 DND 플래그를 가질 수 있으나 **본 모듈의 drop이 선차단**(상위 층 중복 방지).
-3. **WebSocket 송신 페이로드 생성**: M_11이 `ai-speak-signal` 또는 `proactive-notification`으로 변환. 본 모듈은 `IdleEvent` Literal 문자열만 전달.
+3. **WebSocket 송신 페이로드 생성**: M_11이 단일 WS 송신 타입 `ai-speak-signal`로 변환(상세: specs/M_11_ProactiveDispatcher_SPEC.md §7.3). 본 모듈은 `IdleEvent` Literal 문자열만 전달.
 4. **APScheduler 연동 / 아침 브리핑 / 일정 10분 전 알림**: M_11의 책임(`docs/MILESTONES.md` L143~L146).
 5. **로그인/잠금 화면 감지**: Windows 세션 락(`WTSSESSION_CHANGE`) 이벤트는 본 모듈에서 다루지 않는다. 화면 잠금 상태에서는 입력 이벤트가 자연스럽게 0건이 되어 `idle_rest`로 귀결되므로 별도 처리 불필요. 세션 상태 추적은 V2 검토.
 6. **다중 사용자 분리**: REQUIREMENTS.md §10 "1인 1PC". 단일 프로세스 단일 인스턴스.
@@ -548,7 +548,7 @@ async def _safe_invoke_callback(self, event: IdleEvent) -> None:
 
 본 모듈은 **WebSocket을 직접 호출하지 않는다**. 콜백을 통해 `IdleEvent` Literal 문자열만 전달.
 
-M_11이 수신 후 어떻게 `ai-speak-signal` 또는 `proactive-notification`으로 변환하는지는 M_11 SPEC의 책임이다. 참고(§13.4 호출 경로):
+M_11이 수신 후 어떻게 `ai-speak-signal`로 변환하는지는 M_11 SPEC의 책임이다(단일 WS 송신 타입, specs/M_11_ProactiveDispatcher_SPEC.md §7.3). 참고(§13.4 호출 경로):
 
 ```
 IdleMonitor._tick
