@@ -836,10 +836,11 @@ frontend/
 
 ### §19.3 Builder 착수 전 필수 선행 작업
 
-1. **서브모듈 획득**: 외부 단말에서 `git submodule update --init upstream/Open-LLM-VTuber/frontend`로 체크아웃 후 특정 커밋 해시를 기록하고, 트리를 사내 리포 루트 `frontend/`에 복사(Q-1·Q-15).
-2. **CR-10·CR-11 처리**: M_01 스펙 갱신 → fresh Critic 재검수(M_01 대상).
-3. **Q-9 실기기 스파이크**: 옵션 A(`-webkit-app-region: drag` + click-through 전환) 동작 여부 1회 검증. 결과를 `docs/research/electron_pet_mode_spike.md`에 기록(필수 아님 — B로 착수 가능).
-4. **Q-5 한국어 PDF 샘플 스파이크**: 사내 PDF 샘플 1건으로 pdf.js 렌더 품질 확인. 실패 시 MuPDF-wasm 재평가 CR 제출.
+1. ✅ **서브모듈 획득** — 2026-04-21 완료. upstream `main` 브랜치 커밋 `d176e7df2366952e3bacbf12cf9a8b18a4315932` 소스를 루트 `frontend/`에 복사(독립 포크). 절차·근거는 `frontend/UPSTREAM_COMMIT.md`에 기록. `.gitmodules`가 지시한 `build` 브랜치는 배포 산출물이어서 `main`으로 전환 후 반입. 서브모듈은 원래 `build` 커밋(`06a659b...`)으로 복원해 upstream 히스토리 보존.
+2. ✅ **CR-10 처리** — 2026-04-21 Critic PASS. `specs/M_01_AppCore_SPEC.md` §B-4 `set-dnd` + §C `dnd-state` 추가, `src/app/ws_handler.py` 구현. 리뷰: `reviews/M_01_AppCore_CR10_REVIEW.md`.
+3. ✅ **CR-11 처리** — 2026-04-21 Critic PASS R2. `specs/M_01_AppCore_SPEC.md` §C에서 `proactive-notification` 제거 + M_08/M_10/M_12 연관 정리. 리뷰: `reviews/M_01_AppCore_CR11_REVIEW.md`(R1 FAIL), `_R2.md`(R2 PASS).
+4. **Q-9 실기기 스파이크**: 옵션 A(`-webkit-app-region: drag` + click-through 전환) 동작 여부 1회 검증. 결과를 `docs/research/electron_pet_mode_spike.md`에 기록(필수 아님 — B로 착수 가능).
+5. **Q-5 한국어 PDF 샘플 스파이크**: 사내 PDF 샘플 1건으로 pdf.js 렌더 품질 확인. 실패 시 MuPDF-wasm 재평가 CR 제출.
 
 ### §19.4 승인 서명
 
