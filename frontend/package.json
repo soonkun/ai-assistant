@@ -22,7 +22,9 @@
     "build:linux": "electron-vite build && electron-builder --linux",
     "dev:web": "vite serve src/renderer --config vite.config.ts",
     "build:web": "vite build --config vite.config.ts --mode web",
-    "extract-translations": "i18next-scanner --config i18next-scanner.config.js"
+    "extract-translations": "i18next-scanner --config i18next-scanner.config.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.2.3",
@@ -53,6 +55,8 @@
     "@electron-toolkit/eslint-config-prettier": "^2.0.0",
     "@electron-toolkit/eslint-config-ts": "^2.0.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.0.0",
     "@types/node": "^20.14.8",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
@@ -62,11 +66,13 @@
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
     "eslint-plugin-react": "^7.34.3",
+    "jsdom": "^25.0.1",
     "prettier": "^3.3.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "~5.5.2",
     "vite": "^5.3.1",
-    "vite-plugin-static-copy": "^2.3.1"
+    "vite-plugin-static-copy": "^2.3.1",
+    "vitest": "^2.1.0"
   }
 }

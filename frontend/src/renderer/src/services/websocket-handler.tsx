@@ -22,7 +22,7 @@ import { useBrowser } from '@/context/browser-context';
 import { useAvatarStore } from '@/store/avatar-store';
 import { useDndStore } from '@/store/dnd-store';
 import { useCaptureStore } from '@/store/capture-store';
-import type { Emotion } from '@/store/avatar-store';
+import { resolveEmotion, resolveCrossfadeMs } from '@/components/avatar/validators';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -280,12 +280,22 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
 
       case 'avatar-state': {
         // M_08 §7: {emotion, crossfade_ms, speaking}
-        // V1 placeholder: zustand store 업데이트만. 실제 스프라이트 전환은 P2.
-        const emotion = (message.emotion ?? 'neutral') as Emotion;
-        const crossfadeMs = message.crossfade_ms ?? 250;
+        // 공통 검증 헬퍼(@/components/avatar/validators) 사용. §7.2·§8.3 D-3.
+        // 범위 밖 crossfade_ms는 store 갱신 시 이전 값 유지(오염 방지). MAJOR #2 회귀.
+        const emotion = resolveEmotion(message.emotion);
         const speaking = message.speaking ?? false;
+        const prev = useAvatarStore.getState();
+        const crossfadeMs = resolveCrossfadeMs(message.crossfade_ms, prev.crossfadeMs);
+        if (
+          message.crossfade_ms !== undefined &&
+          crossfadeMs !== message.crossfade_ms
+        ) {
+          console.warn(
+            `[WS] avatar-state crossfade_ms out of range: ${message.crossfade_ms}; keeping previous ${prev.crossfadeMs}ms`,
+          );
+        }
         console.log('[WS] avatar-state received:', { emotion, crossfadeMs, speaking });
-        useAvatarStore.getState().setAvatarState({ emotion, crossfadeMs, speaking });
+        prev.setAvatarState({ emotion, crossfadeMs, speaking });
         break;
       }
 
