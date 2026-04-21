@@ -71,6 +71,28 @@ function setupIPC(): void {
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
     return sources[0].id;
   });
+
+  // M_12 P1 — Pet Mode IPC 핸들러 뼈대 (M_12 §9.4)
+  // 실제 BrowserWindow 펫 창 생성·제어는 P3에서 구현 예정.
+  ipcMain.handle('pet-mode:enable', () => {
+    console.log('[TODO P3] pet-mode:enable');
+  });
+
+  ipcMain.handle('pet-mode:disable', () => {
+    console.log('[TODO P3] pet-mode:disable');
+  });
+
+  ipcMain.handle('pet-mode:setClickThrough', (_event, on: boolean, forward: boolean) => {
+    console.log('[TODO P3] pet-mode:setClickThrough', { on, forward });
+  });
+
+  ipcMain.handle('pet-mode:setAlwaysOnTop', (_event, on: boolean) => {
+    console.log('[TODO P3] pet-mode:setAlwaysOnTop', { on });
+  });
+
+  ipcMain.handle('pet-mode:dragStart', (_event, payload: { x: number; y: number }) => {
+    console.log('[TODO P3] pet-mode:dragStart', payload);
+  });
 }
 
 app.whenReady().then(() => {

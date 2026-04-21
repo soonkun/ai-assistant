@@ -1,16 +1,14 @@
 /* eslint-disable no-sparse-arrays */
-/* eslint-disable react-hooks/exhaustive-deps */
-// eslint-disable-next-line object-curly-newline
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { wsService, MessageEvent } from '@/services/websocket-service';
 import {
   WebSocketContext, HistoryInfo, defaultWsUrl, defaultBaseUrl,
 } from '@/context/websocket-context';
-import { ModelInfo, useLive2DConfig } from '@/context/live2d-config-context';
+// ModelInfo / useLive2DConfig 제거됨 (M_12 §3.3 DROP)
 import { useSubtitle } from '@/context/subtitle-context';
 import { audioTaskQueue } from '@/utils/task-queue';
-import { useAudioTask } from '@/components/canvas/live2d';
+import { useAudioTask } from '@/hooks/utils/use-audio-task';
 import { useBgUrl } from '@/context/bgurl-context';
 import { useConfig } from '@/context/character-config-context';
 import { useChatHistory } from '@/context/chat-history-context';
@@ -21,6 +19,10 @@ import { useLocalStorage } from '@/hooks/utils/use-local-storage';
 import { useGroup } from '@/context/group-context';
 import { useInterrupt } from '@/hooks/utils/use-interrupt';
 import { useBrowser } from '@/context/browser-context';
+import { useAvatarStore } from '@/store/avatar-store';
+import { useDndStore } from '@/store/dnd-store';
+import { useCaptureStore } from '@/store/capture-store';
+import type { Emotion } from '@/store/avatar-store';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -28,13 +30,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
   const [wsUrl, setWsUrl] = useLocalStorage<string>('wsUrl', defaultWsUrl);
   const [baseUrl, setBaseUrl] = useLocalStorage<string>('baseUrl', defaultBaseUrl);
   const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
-  const { setModelInfo } = useLive2DConfig();
+  // setModelInfo 제거됨 (M_12 §3.3 DROP — Live2D 제거)
   const { setSubtitleText } = useSubtitle();
   const { clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage } = useChatHistory();
   const { addAudioTask } = useAudioTask();
   const bgUrlContext = useBgUrl();
-  const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
-  const [pendingModelInfo, setPendingModelInfo] = useState<ModelInfo | undefined>(undefined);
+  const { setConfName, setConfUid, setConfigFiles } = useConfig();
   const { setSelfUid, setGroupMembers, setIsOwner } = useGroup();
   const { startMic, stopMic, autoStartMicOnConvEnd } = useVAD();
   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
@@ -45,12 +46,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
   }, [autoStartMicOnConvEnd]);
 
-  useEffect(() => {
-    if (pendingModelInfo && confUid) {
-      setModelInfo(pendingModelInfo);
-      setPendingModelInfo(undefined);
-    }
-  }, [pendingModelInfo, setModelInfo, confUid]);
+  // pendingModelInfo/setModelInfo useEffect 제거됨 (M_12 §3.3 DROP)
 
   const {
     setCurrentHistoryUid, setMessages, setHistoryList,
@@ -100,6 +96,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         }
         break;
       case 'set-model-and-conf':
+        // M_12 §3.3 DROP: Live2D model 관련 처리 제거. 캐릭터 conf/uid만 유지.
         setAiState('loading');
         if (message.conf_name) {
           setConfName(message.conf_name);
@@ -111,15 +108,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
         if (message.client_uid) {
           setSelfUid(message.client_uid);
         }
-        setPendingModelInfo(message.model_info);
-        // setModelInfo(message.model_info);
-        // We don't know when the confRef in live2d-config-context will be updated, so we set a delay here for convenience
-        if (message.model_info && !message.model_info.url.startsWith("http")) {
-          const modelUrl = baseUrl + message.model_info.url;
-          // eslint-disable-next-line no-param-reassign
-          message.model_info.url = modelUrl;
-        }
-
+        // model_info (Live2D) 처리 제거됨 (M_12 §3.3 DROP)
         setAiState('idle');
         break;
       case 'full-text':
@@ -286,10 +275,63 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           console.warn('Received incomplete tool_call_status message:', message);
         }
         break;
+
+      // M_12 P1 — 신규 수신 케이스 (M_01 §C, M_08 §7, M_11 §7.3)
+
+      case 'avatar-state': {
+        // M_08 §7: {emotion, crossfade_ms, speaking}
+        // V1 placeholder: zustand store 업데이트만. 실제 스프라이트 전환은 P2.
+        const emotion = (message.emotion ?? 'neutral') as Emotion;
+        const crossfadeMs = message.crossfade_ms ?? 250;
+        const speaking = message.speaking ?? false;
+        console.log('[WS] avatar-state received:', { emotion, crossfadeMs, speaking });
+        useAvatarStore.getState().setAvatarState({ emotion, crossfadeMs, speaking });
+        break;
+      }
+
+      case 'continuous-capture-state': {
+        // M_01 §C: {running, interval_sec?}
+        const running = message.running ?? false;
+        const intervalSec = message.interval_sec;
+        console.log('[WS] continuous-capture-state received:', { running, intervalSec });
+        useCaptureStore.setState({ running });
+        if (intervalSec !== undefined) {
+          useCaptureStore.setState({ intervalSec });
+        }
+        break;
+      }
+
+      case 'dnd-state': {
+        // M_01 §C, CR-10: {enabled} — SSoT 경로
+        const enabled = message.enabled ?? false;
+        console.log('[WS] dnd-state received:', { enabled });
+        useDndStore.setState({ enabled });
+        break;
+      }
+
+      case 'ai-speak-signal': {
+        // M_11 §7.3: 서버→클라 프로액티브 발화 신호
+        // topic 검증 및 토스트 표시. 실제 후속 처리(audio 프레임 대기)는 P5.
+        const VALID_TOPICS = ['morning_briefing', 'event_reminder', 'idle_rest', 'overwork'] as const;
+        type ProactiveTopic = typeof VALID_TOPICS[number];
+        const topic = message.topic as string | undefined;
+        if (!topic || !VALID_TOPICS.includes(topic as ProactiveTopic)) {
+          console.warn('[WS] ai-speak-signal: unknown or missing topic, ignoring.', message);
+          break;
+        }
+        console.info('[WS] ai-speak-signal received:', { topic, text: message.text, context: message.context });
+        toaster.create({
+          title: `프로액티브 [${topic}]`,
+          type: 'info',
+          duration: 3000,
+        });
+        break;
+      }
+
       default:
         console.warn('Unknown message type:', message.type);
     }
-  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
+  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
 
   useEffect(() => {
     wsService.connect(wsUrl);

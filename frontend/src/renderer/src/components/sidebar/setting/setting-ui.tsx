@@ -1,4 +1,3 @@
-/* eslint-disable import/no-extraneous-dependencies */
 import {
   Tabs,
   Button,
@@ -17,7 +16,7 @@ import { CloseButton } from '@/components/ui/close-button';
 
 import { settingStyles } from './setting-styles';
 import General from './general';
-import Live2D from './live2d';
+import Avatar from './avatar';
 import ASR from './asr';
 import TTS from './tts';
 import Agent from './agent';
@@ -68,8 +67,8 @@ function SettingUI({ open, onClose }: SettingUIProps): JSX.Element {
             onCancel={handleCancelCallback}
           />
         </Tabs.Content>
-        <Tabs.Content value="live2d" {...settingStyles.settingUI.tabs.content}>
-          <Live2D
+        <Tabs.Content value="avatar" {...settingStyles.settingUI.tabs.content}>
+          <Avatar
             onSave={handleSaveCallback}
             onCancel={handleCancelCallback}
           />
@@ -128,10 +127,11 @@ function SettingUI({ open, onClose }: SettingUIProps): JSX.Element {
                 {t('settings.tabs.general')}
               </Tabs.Trigger>
               <Tabs.Trigger
-                value="live2d"
+                value="avatar"
                 {...settingStyles.settingUI.tabs.trigger}
               >
-                {t('settings.tabs.live2d')}
+                {/* M_12 §3.3: 스프라이트 아바타 설정 (P2에서 실구현) */}
+                아바타
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="asr"

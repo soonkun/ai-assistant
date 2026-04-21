@@ -1,8 +1,7 @@
-/* eslint-disable global-require */
-/* eslint-disable @typescript-eslint/no-var-requires */
 /* eslint-disable no-use-before-define */
 import { Subject } from 'rxjs';
-import { ModelInfo } from '@/context/live2d-config-context';
+import i18next from 'i18next';
+// ModelInfo 제거됨 (M_12 §3.3 DROP — Live2D 제거)
 import { HistoryInfo } from '@/context/websocket-context';
 import { ConfigFile } from '@/context/character-config-context';
 import { toaster } from '@/components/ui/toaster';
@@ -62,7 +61,7 @@ export interface MessageEvent {
   files?: BackgroundFile[];
   actions?: Actions;
   text?: string;
-  model_info?: ModelInfo;
+  // model_info 제거됨 (M_12 §3.3 DROP — Live2D 제거)
   conf_name?: string;
   conf_uid?: string;
   uids?: string[];
@@ -77,7 +76,6 @@ export interface MessageEvent {
   client_uid?: string;
   forwarded?: boolean;
   display_text?: DisplayText;
-  live2d_model?: string;
   browser_view?: {
     debuggerFullscreenUrl: string;
     debuggerUrl: string;
@@ -92,18 +90,23 @@ export interface MessageEvent {
     wsUrl: string;
     sessionId?: string;
   };
+  // M_12 P1 — 신규 수신 타입 페이로드 필드 (M_01 §B, §C)
+  /** avatar-state: M_08 §7 */
+  emotion?: string;
+  crossfade_ms?: number;
+  speaking?: boolean;
+  /** continuous-capture-state: M_01 §C */
+  running?: boolean;
+  interval_sec?: number;
+  /** dnd-state: M_01 §C, CR-10 */
+  enabled?: boolean;
+  /** ai-speak-signal: M_11 §7.3 */
+  topic?: string;
+  context?: Record<string, unknown>;
 }
 
 // Get translation function for error messages
-const getTranslation = () => {
-  try {
-    const i18next = require('i18next').default;
-    return i18next.t.bind(i18next);
-  } catch (e) {
-    // Fallback if i18next is not available
-    return (key: string) => key;
-  }
-};
+const getTranslation = () => i18next.t.bind(i18next);
 
 class WebSocketService {
   private static instance: WebSocketService;
@@ -213,6 +216,71 @@ class WebSocketService {
 
   getCurrentState() {
     return this.currentState;
+  }
+
+  // M_12 P1 — 송신 헬퍼 메서드 (M_01 §B-1~B-4)
+
+  /**
+   * 화면 캡처 트리거 전송 (M_01 §B-1)
+   * @param prompt - 캡처 분석 프롬프트
+   * @param monitorIndex - 모니터 인덱스 (기본값 0)
+   */
+  sendScreenshotTrigger(prompt?: string, monitorIndex?: number): void {
+    if (this.currentState !== 'OPEN') {
+      console.warn('[WS] sendScreenshotTrigger: WebSocket not open');
+      return;
+    }
+    this.ws!.send(JSON.stringify({
+      type: 'screenshot-trigger',
+      ...(prompt !== undefined && { prompt }),
+      ...(monitorIndex !== undefined && { monitor_index: monitorIndex }),
+    }));
+  }
+
+  /**
+   * 연속 캡처 시작 전송 (M_01 §B-2)
+   * @param intervalSec - 캡처 간격(초)
+   * @param monitorIndex - 모니터 인덱스
+   * @param promptTemplate - 프롬프트 템플릿
+   */
+  sendStartContinuousCapture(
+    intervalSec: number,
+    monitorIndex?: number,
+    promptTemplate?: string,
+  ): void {
+    if (this.currentState !== 'OPEN') {
+      console.warn('[WS] sendStartContinuousCapture: WebSocket not open');
+      return;
+    }
+    this.ws!.send(JSON.stringify({
+      type: 'start-continuous-capture',
+      interval_sec: intervalSec,
+      ...(monitorIndex !== undefined && { monitor_index: monitorIndex }),
+      ...(promptTemplate !== undefined && { prompt_template: promptTemplate }),
+    }));
+  }
+
+  /**
+   * 연속 캡처 중지 전송 (M_01 §B-3)
+   */
+  sendStopContinuousCapture(): void {
+    if (this.currentState !== 'OPEN') {
+      console.warn('[WS] sendStopContinuousCapture: WebSocket not open');
+      return;
+    }
+    this.ws!.send(JSON.stringify({ type: 'stop-continuous-capture' }));
+  }
+
+  /**
+   * DND 상태 설정 전송 (M_01 §B-4, CR-10)
+   * @param enabled - DND 활성화 여부
+   */
+  sendSetDnd(enabled: boolean): void {
+    if (this.currentState !== 'OPEN') {
+      console.warn('[WS] sendSetDnd: WebSocket not open');
+      return;
+    }
+    this.ws!.send(JSON.stringify({ type: 'set-dnd', enabled }));
   }
 }
 

@@ -12,6 +12,19 @@ declare global {
   }
 }
 
+// M_12 P1 — petMode IPC API (M_12 §9.4)
+// 메인 프로세스 핸들러는 P3에서 구현 예정. 채널명 접두사: 'pet-mode:'
+const petModeApi = {
+  enable: (): Promise<void> => ipcRenderer.invoke('pet-mode:enable'),
+  disable: (): Promise<void> => ipcRenderer.invoke('pet-mode:disable'),
+  setClickThrough: (on: boolean, forward: boolean): Promise<void> =>
+    ipcRenderer.invoke('pet-mode:setClickThrough', on, forward),
+  setAlwaysOnTop: (on: boolean): Promise<void> =>
+    ipcRenderer.invoke('pet-mode:setAlwaysOnTop', on),
+  dragStart: (payload: { x: number; y: number }): Promise<void> =>
+    ipcRenderer.invoke('pet-mode:dragStart', payload),
+};
+
 const api = {
   setIgnoreMouseEvents: (ignore: boolean) => {
     ipcRenderer.send('set-ignore-mouse-events', ignore);
@@ -88,10 +101,13 @@ if (process.contextIsolated) {
       },
     });
     contextBridge.exposeInMainWorld('api', api);
+    // M_12 §9.4: petMode IPC 노출 (contextBridge.exposeInMainWorld)
+    contextBridge.exposeInMainWorld('petMode', petModeApi);
   } catch (error) {
     console.error(error);
   }
 } else {
   window.electron = electronAPI;
   (window as any).api = api;
+  (window as any).petMode = petModeApi;
 }

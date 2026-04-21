@@ -19,6 +19,14 @@ declare global {
       getConfigFiles: () => Promise<any>
       updateConfigFiles: (files: any[]) => void
     }
+    /** M_12 §5.2·§9.4 — PetMode IPC API (P3에서 실제 구현) */
+    petMode: {
+      enable(): Promise<void>
+      disable(): Promise<void>
+      setClickThrough(on: boolean, forward: boolean): Promise<void>
+      setAlwaysOnTop(on: boolean): Promise<void>
+      dragStart(payload: { x: number; y: number }): Promise<void>
+    }
   }
 }
 

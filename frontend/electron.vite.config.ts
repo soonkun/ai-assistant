@@ -15,12 +15,7 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),
-        "@framework": resolve("src/renderer/WebSDK/Framework/src"),
-        "@cubismsdksamples": resolve("src/renderer/WebSDK/src"),
-        "@motionsyncframework": resolve(
-          "src/renderer/MotionSync/Framework/src",
-        ),
-        "@motionsync": resolve("src/renderer/MotionSync/src"),
+        // M_12 §3.3 DROP: WebSDK/CubismSDK/MotionSync aliases 제거됨
         "/src": resolve("src/renderer/src"),
       },
     },
@@ -43,10 +38,7 @@ export default defineConfig({
             src: normalizePath(resolve(__dirname, 'node_modules/onnxruntime-web/dist/*.wasm')),
             dest: './libs/',
           },
-          {
-            src: normalizePath(resolve(__dirname, 'src/renderer/WebSDK/Core/live2dcubismcore.js')),
-            dest: './libs/'
-          }
+          // M_12 §3.3 DROP: live2dcubismcore.js 복사 제거됨
         ],
       }),
       react(),

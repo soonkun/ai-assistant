@@ -9,7 +9,6 @@ export const useInterrupt = () => {
   const { aiState, setAiState } = useAiState();
   const { sendMessage } = useWebSocket();
   const { fullResponse, clearResponse } = useChatHistory();
-  // const { currentModel } = useLive2DModel();
   const { subtitleText, setSubtitleText } = useSubtitle();
   const { stopCurrentAudioAndLipSync } = useAudioTask();
 

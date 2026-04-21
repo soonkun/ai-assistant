@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import Sidebar from "./components/sidebar/sidebar";
 import Footer from "./components/footer/footer";
 import { AiStateProvider } from "./context/ai-state-context";
-import { Live2DConfigProvider } from "./context/live2d-config-context";
+// Live2DConfigProvider 제거됨 (M_12 §3.3 DROP) — SpriteAvatarRenderer로 교체
 import { SubtitleProvider } from "./context/subtitle-context";
 import { BgUrlProvider } from "./context/bgurl-context";
 import { layoutStyles } from "./layout";
@@ -16,14 +16,13 @@ import { ChatHistoryProvider } from "./context/chat-history-context";
 import { CharacterConfigProvider } from "./context/character-config-context";
 import { Toaster } from "./components/ui/toaster";
 import { VADProvider } from "./context/vad-context";
-import { Live2D } from "./components/canvas/live2d";
+import { SpriteAvatarRenderer } from "./components/avatar/SpriteAvatarRenderer";
 import TitleBar from "./components/electron/title-bar";
 import { InputSubtitle } from "./components/electron/input-subtitle";
 import { ProactiveSpeakProvider } from "./context/proactive-speak-context";
 import { ScreenCaptureProvider } from "./context/screen-capture-context";
 import { GroupProvider } from "./context/group-context";
 import { BrowserProvider } from "./context/browser-context";
-// eslint-disable-next-line import/no-extraneous-dependencies, import/newline-after-import
 import "@chatscope/chat-ui-kit-styles/dist/default/styles.min.css";
 import Background from "./components/canvas/background";
 import WebSocketStatus from "./components/canvas/ws-status";
@@ -35,7 +34,7 @@ function AppContent(): JSX.Element {
   const [isFooterCollapsed, setIsFooterCollapsed] = useState(false);
   const { mode } = useMode();
   const isElectron = window.api !== undefined;
-  const live2dContainerRef = useRef<HTMLDivElement>(null);
+  const avatarContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -58,7 +57,7 @@ function AppContent(): JSX.Element {
   document.body.style.width = '100%';
 
   // Define base style properties shared across modes/breakpoints
-  const live2dBaseStyle = {
+  const avatarBaseStyle = {
     position: "absolute" as const,
     overflow: "hidden",
     transition: "all 0.3s ease-in-out", // Optional transition
@@ -66,8 +65,8 @@ function AppContent(): JSX.Element {
   };
 
   // Define styles specifically for the "window" mode, using responsive syntax
-  const getResponsiveLive2DWindowStyle = (sidebarVisible: boolean) => ({
-    ...live2dBaseStyle,
+  const getResponsiveAvatarWindowStyle = (sidebarVisible: boolean) => ({
+    ...avatarBaseStyle,
     top: isElectron ? "30px" : "0px",
     height: `calc(100% - ${isElectron ? "30px" : "0px"})`,
     zIndex: 5, // Ensure it's layered correctly below UI but above background
@@ -82,8 +81,8 @@ function AppContent(): JSX.Element {
   });
 
   // Define styles specifically for the "pet" mode
-  const live2dPetStyle = {
-    ...live2dBaseStyle,
+  const avatarPetStyle = {
+    ...avatarBaseStyle,
     top: 0, // Override position for pet mode
     left: 0,
     width: "100vw", // Full viewport
@@ -94,14 +93,15 @@ function AppContent(): JSX.Element {
   return (
     <>
       <Box
-        ref={live2dContainerRef}
+        ref={avatarContainerRef}
         // Apply styles conditionally based on mode
         // Use the function to get dynamic responsive styles for window mode
         {...(mode === "window"
-          ? getResponsiveLive2DWindowStyle(showSidebar)
-          : live2dPetStyle)}
+          ? getResponsiveAvatarWindowStyle(showSidebar)
+          : avatarPetStyle)}
       >
-        <Live2D />
+        {/* M_12 §3.3 DROP: Live2D → SpriteAvatarRenderer placeholder (P2에서 실제 구현) */}
+        <SpriteAvatarRenderer showSidebar={showSidebar} />
       </Box>
 
       {/* Conditional Rendering of Window UI */}
@@ -176,22 +176,21 @@ function AppWithGlobalStyles(): JSX.Element {
             <ChatHistoryProvider>
               <AiStateProvider>
                 <ProactiveSpeakProvider>
-                  <Live2DConfigProvider>
-                    <SubtitleProvider>
-                      <VADProvider>
-                        <BgUrlProvider>
-                          <GroupProvider>
-                            <BrowserProvider>
-                              <WebSocketHandler>
-                                <Toaster />
-                                <AppContent />
-                              </WebSocketHandler>
-                            </BrowserProvider>
-                          </GroupProvider>
-                        </BgUrlProvider>
-                      </VADProvider>
-                    </SubtitleProvider>
-                  </Live2DConfigProvider>
+                  {/* Live2DConfigProvider 제거됨 (M_12 §3.3 DROP) */}
+                  <SubtitleProvider>
+                    <VADProvider>
+                      <BgUrlProvider>
+                        <GroupProvider>
+                          <BrowserProvider>
+                            <WebSocketHandler>
+                              <Toaster />
+                              <AppContent />
+                            </WebSocketHandler>
+                          </BrowserProvider>
+                        </GroupProvider>
+                      </BgUrlProvider>
+                    </VADProvider>
+                  </SubtitleProvider>
                 </ProactiveSpeakProvider>
               </AiStateProvider>
             </ChatHistoryProvider>
