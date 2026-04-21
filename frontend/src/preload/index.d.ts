@@ -32,6 +32,11 @@ declare global {
       /** mouseup/blur 시점. offset 초기화 + 최종 위치 영속화. */
       dragEnd(): Promise<void>
     }
+    /** M_12 P4 §8.3.2 — shell IPC (로컬 파일 열기) */
+    shell: {
+      /** 로컬 절대 경로의 파일을 시스템 기본 앱으로 열기. 실패 시 에러 메시지 반환. */
+      openPath(absolutePath: string): Promise<string>
+    }
   }
 }
 

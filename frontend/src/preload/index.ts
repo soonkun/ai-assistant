@@ -12,6 +12,12 @@ declare global {
   }
 }
 
+// M_12 P4 §8.3.2 — shell IPC API (로컬 파일 열기)
+const shellApi = {
+  openPath: (absolutePath: string): Promise<string> =>
+    ipcRenderer.invoke('shell:openPath', absolutePath),
+};
+
 // M_12 P3 — petMode IPC API (§5.2, Q-9 B안)
 // dragMove·dragEnd 2종 추가: mouseup 감지를 위해 dragStart만으로는 dragEnd 시점을 알 수 없음.
 // renderer에서 window.mousemove / mouseup 이벤트를 받아 IPC로 전달하는 구조 필요.
@@ -107,6 +113,8 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('api', api);
     // M_12 §9.4: petMode IPC 노출 (contextBridge.exposeInMainWorld)
     contextBridge.exposeInMainWorld('petMode', petModeApi);
+    // M_12 P4 §8.3.2: shell IPC 노출
+    contextBridge.exposeInMainWorld('shell', shellApi);
   } catch (error) {
     console.error(error);
   }
@@ -114,4 +122,5 @@ if (process.contextIsolated) {
   window.electron = electronAPI;
   (window as any).api = api;
   (window as any).petMode = petModeApi;
+  (window as any).shell = shellApi;
 }

@@ -1,5 +1,5 @@
 /* eslint-disable no-shadow */
-import { app, ipcMain, globalShortcut, desktopCapturer, screen } from "electron";
+import { app, ipcMain, globalShortcut, desktopCapturer, screen, shell } from "electron";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { WindowManager } from "./window-manager";
 import { MenuManager } from "./menu-manager";
@@ -198,6 +198,19 @@ function setupIPC(): void {
     const newX = Math.round(screenX - dragOffset.x);
     const newY = Math.round(screenY - dragOffset.y);
     win.setPosition(newX, newY);
+  });
+
+  // M_12 P4 §8.3.2 — shell:openPath (로컬 파일만 허용, 보안 검증)
+  ipcMain.handle('shell:openPath', async (_event, absolutePath: unknown): Promise<string> => {
+    if (typeof absolutePath !== 'string' || absolutePath.length === 0) {
+      throw new Error('shell:openPath: absolutePath must be non-empty string');
+    }
+    // 보안: http/https/file URL 및 Windows UNC 경로 거부 (로컬 절대 경로만)
+    if (/^(https?:|file:|\\\\)/i.test(absolutePath)) {
+      throw new Error('shell:openPath: remote/UNC paths not allowed');
+    }
+    logger.info(`[Shell] openPath: ${absolutePath}`);
+    return shell.openPath(absolutePath);
   });
 
   // pet:dragEnd() — offset 초기화 + 최종 위치 영속화 (Q-12)

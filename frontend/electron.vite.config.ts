@@ -39,6 +39,11 @@ export default defineConfig({
             dest: './libs/',
           },
           // M_12 §3.3 DROP: live2dcubismcore.js 복사 제거됨
+          // M_12 P4 §8.3.3 — pdfjs-dist worker (offline, CDN 금지)
+          {
+            src: normalizePath(resolve(__dirname, 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs')),
+            dest: './assets/pdfjs/',
+          },
         ],
       }),
       react(),
