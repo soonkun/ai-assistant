@@ -12,17 +12,21 @@ declare global {
   }
 }
 
-// M_12 P1 — petMode IPC API (M_12 §9.4)
-// 메인 프로세스 핸들러는 P3에서 구현 예정. 채널명 접두사: 'pet-mode:'
+// M_12 P3 — petMode IPC API (§5.2, Q-9 B안)
+// dragMove·dragEnd 2종 추가: mouseup 감지를 위해 dragStart만으로는 dragEnd 시점을 알 수 없음.
+// renderer에서 window.mousemove / mouseup 이벤트를 받아 IPC로 전달하는 구조 필요.
 const petModeApi = {
-  enable: (): Promise<void> => ipcRenderer.invoke('pet-mode:enable'),
-  disable: (): Promise<void> => ipcRenderer.invoke('pet-mode:disable'),
+  enable: (): Promise<void> => ipcRenderer.invoke('pet:enable'),
+  disable: (): Promise<void> => ipcRenderer.invoke('pet:disable'),
   setClickThrough: (on: boolean, forward: boolean): Promise<void> =>
-    ipcRenderer.invoke('pet-mode:setClickThrough', on, forward),
+    ipcRenderer.invoke('pet:setClickThrough', on, forward),
   setAlwaysOnTop: (on: boolean): Promise<void> =>
-    ipcRenderer.invoke('pet-mode:setAlwaysOnTop', on),
+    ipcRenderer.invoke('pet:setAlwaysOnTop', on),
   dragStart: (payload: { x: number; y: number }): Promise<void> =>
-    ipcRenderer.invoke('pet-mode:dragStart', payload),
+    ipcRenderer.invoke('pet:dragStart', payload),
+  dragMove: (payload: { screenX: number; screenY: number }): Promise<void> =>
+    ipcRenderer.invoke('pet:dragMove', payload),
+  dragEnd: (): Promise<void> => ipcRenderer.invoke('pet:dragEnd'),
 };
 
 const api = {

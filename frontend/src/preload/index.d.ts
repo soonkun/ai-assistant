@@ -19,13 +19,18 @@ declare global {
       getConfigFiles: () => Promise<any>
       updateConfigFiles: (files: any[]) => void
     }
-    /** M_12 §5.2·§9.4 — PetMode IPC API (P3에서 실제 구현) */
+    /** M_12 §5.2·§9.4 — PetMode IPC API (P3 실구현, Q-9 B안) */
     petMode: {
       enable(): Promise<void>
       disable(): Promise<void>
       setClickThrough(on: boolean, forward: boolean): Promise<void>
       setAlwaysOnTop(on: boolean): Promise<void>
+      /** mousedown 시점 창 viewport 기준 cursor 좌표. main은 offset 저장만 수행. */
       dragStart(payload: { x: number; y: number }): Promise<void>
+      /** mousemove 스트림. main이 offset 차감으로 win.setPosition() 호출. */
+      dragMove(payload: { screenX: number; screenY: number }): Promise<void>
+      /** mouseup/blur 시점. offset 초기화 + 최종 위치 영속화. */
+      dragEnd(): Promise<void>
     }
   }
 }

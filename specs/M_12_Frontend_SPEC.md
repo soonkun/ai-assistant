@@ -198,9 +198,16 @@ type PetModeApi = {
   disable(): Promise<void>;
   setClickThrough(on: boolean, forward: boolean): Promise<void>;
   setAlwaysOnTop(on: boolean): Promise<void>;
+  /** mousedown 시점 창 viewport 기준 cursor 좌표. main은 offset 저장만 수행. */
   dragStart(payload: { x: number; y: number }): Promise<void>;
+  /** mousemove 스트림. main이 offset 차감으로 win.setPosition() 호출. */
+  dragMove(payload: { screenX: number; screenY: number }): Promise<void>;
+  /** mouseup/blur 시점. offset 초기화 + 최종 위치 영속화(Q-12). */
+  dragEnd(): Promise<void>;
 };
 ```
+
+> **P3 확장 근거 (2026-04-21)**: `dragStart`만으로는 main이 mouseup 시점을 알 수 없어 Q-9 B안(JS mousedown + IPC setPosition) 구현에 `dragMove`·`dragEnd` 2종이 필연. 초안(`dragStart(ev: MouseEvent): void`)은 renderer-side 인터페이스였고, 실제 IPC 채널 계약으로 확장하며 payload를 평면 `{x,y}`/`{screenX,screenY}`로 확정했다. `specs/M_12_Frontend_SPEC.md` §19 Open Questions Q-9 결정 범위.
 
 ### §5.3 `CitationViewer`
 
@@ -394,9 +401,9 @@ const petWin = new BrowserWindow({
 **결정 보류**: Open Question Q-9에 위임. 스펙은 두 선택지를 제안만 한다.
 
 ### §9.4 IPC 계약
-- 채널명은 접두사 `pet:`으로 통일 — `pet:enable`, `pet:disable`, `pet:setClickThrough`, `pet:setAlwaysOnTop`, `pet:dragStart`.
+- 채널명은 접두사 `pet:`으로 통일 — `pet:enable`, `pet:disable`, `pet:setClickThrough`, `pet:setAlwaysOnTop`, `pet:dragStart`, `pet:dragMove`, `pet:dragEnd`. (§5.2 PetModeApi의 7종과 1:1 매핑.)
 - preload에서 `contextBridge.exposeInMainWorld("petMode", api)`로 제한 노출. 그 외 Node API는 노출 금지.
-- 메인 프로세스 핸들러는 **입력값 범위 검증**(bool 여부, 좌표 정수 여부)을 반드시 수행(§10.3).
+- 메인 프로세스 핸들러는 **입력값 범위 검증**(bool 여부, finite number, 좌표 정수 여부)을 반드시 수행(§10.3). 실패 시 `throw new Error(...)`로 renderer에 reject 전파.
 
 ### §9.5 창 수명
 - 펫 모드 종료 시 `BrowserWindow.destroy()` 완전 해제. 재개는 새 인스턴스 생성.

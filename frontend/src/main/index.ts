@@ -1,12 +1,42 @@
 /* eslint-disable no-shadow */
-import { app, ipcMain, globalShortcut, desktopCapturer } from "electron";
+import { app, ipcMain, globalShortcut, desktopCapturer, screen } from "electron";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { WindowManager } from "./window-manager";
 import { MenuManager } from "./menu-manager";
+import { loadPetWindowState, savePetWindowState } from "./pet-window-persistence";
+import {
+  isBool,
+  isFiniteNumber,
+  clampToVirtualScreen,
+} from "./pet-ipc-validators";
+
+// Electron main 프로세스 로거
+const logger = {
+  info: (...args: unknown[]): void => { console.info('[M_12]', ...args); },
+  warn: (...args: unknown[]): void => { console.warn('[M_12]', ...args); },
+};
 
 let windowManager: WindowManager;
 let menuManager: MenuManager;
 let isQuitting = false;
+
+// M_12 P3 §3.2 Q-9 B안 — drag 시점의 'cursor의 창 내 위치' 저장.
+// dragStart에서 기록, dragEnd에서 초기화. dragMove에서 win.setPosition(screenX - x, screenY - y).
+let dragOffset: { x: number; y: number } | null = null;
+
+/** 현재 연결된 모든 displays의 bounds를 clampToVirtualScreen에 넘길 형태로 변환. */
+function currentDisplayBounds(): { x: number; y: number; width: number; height: number }[] {
+  try {
+    return screen.getAllDisplays().map((d) => ({
+      x: d.bounds.x,
+      y: d.bounds.y,
+      width: d.bounds.width,
+      height: d.bounds.height,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 function setupIPC(): void {
   ipcMain.handle("get-platform", () => process.platform);
@@ -72,26 +102,113 @@ function setupIPC(): void {
     return sources[0].id;
   });
 
-  // M_12 P1 — Pet Mode IPC 핸들러 뼈대 (M_12 §9.4)
-  // 실제 BrowserWindow 펫 창 생성·제어는 P3에서 구현 예정.
-  ipcMain.handle('pet-mode:enable', () => {
-    console.log('[TODO P3] pet-mode:enable');
+  // M_12 P3 — Pet Mode IPC 실배선 (§3.2, §5.2, §9.4, Q-9 B안, Q-12)
+  // 채널 접두사: 스펙 §9.4 L397 "pet:" 준수.
+  // 모든 핸들러는 §9.4·§10.3에 따라 입력값 범위 검증을 수행 (boolean·finite number).
+
+  // pet:enable → windowManager.setWindowMode('pet') + 저장 위치 복원 (virtual screen clamp)
+  ipcMain.handle('pet:enable', () => {
+    logger.info('[PetMode] enable');
+    windowManager.setWindowMode('pet');
+    // 저장된 위치를 다음 틱에서 복원 (upstream setWindowModePet 가상 스크린 span 완료 후).
+    // MAJOR-4: 현재 virtual screen 범위 밖이면 복원 생략 (모니터 토폴로지 변경 대비).
+    setTimeout(() => {
+      const state = loadPetWindowState();
+      if (!state) return;
+      const clamped = clampToVirtualScreen(state.x, state.y, currentDisplayBounds());
+      if (!clamped) {
+        logger.warn(
+          `[PetMode] saved position x=${state.x} y=${state.y} out of virtual screen; skip restore`,
+        );
+        return;
+      }
+      const win = windowManager.getWindow();
+      win?.setPosition(clamped.x, clamped.y);
+      logger.info(`[PetMode] restored position x=${clamped.x} y=${clamped.y}`);
+    }, 600);
   });
 
-  ipcMain.handle('pet-mode:disable', () => {
-    console.log('[TODO P3] pet-mode:disable');
+  // pet:disable → windowManager.setWindowMode('window')
+  ipcMain.handle('pet:disable', () => {
+    logger.info('[PetMode] disable');
+    windowManager.setWindowMode('window');
   });
 
-  ipcMain.handle('pet-mode:setClickThrough', (_event, on: boolean, forward: boolean) => {
-    console.log('[TODO P3] pet-mode:setClickThrough', { on, forward });
+  // pet:setClickThrough(on, forward) → win.setIgnoreMouseEvents(on, {forward})
+  ipcMain.handle('pet:setClickThrough', (_event, on: unknown, forward: unknown) => {
+    if (!isBool(on) || !isBool(forward)) {
+      logger.warn(`[PetMode] setClickThrough invalid args: on=${on} forward=${forward}`);
+      throw new Error('pet:setClickThrough: args must be boolean');
+    }
+    logger.info(`[PetMode] setClickThrough on=${on} forward=${forward}`);
+    const win = windowManager.getWindow();
+    if (!win) return;
+    if (on) {
+      win.setIgnoreMouseEvents(true, { forward });
+    } else {
+      win.setIgnoreMouseEvents(false);
+    }
   });
 
-  ipcMain.handle('pet-mode:setAlwaysOnTop', (_event, on: boolean) => {
-    console.log('[TODO P3] pet-mode:setAlwaysOnTop', { on });
+  // pet:setAlwaysOnTop(on) → win.setAlwaysOnTop(on)
+  ipcMain.handle('pet:setAlwaysOnTop', (_event, on: unknown) => {
+    if (!isBool(on)) {
+      logger.warn(`[PetMode] setAlwaysOnTop invalid arg: on=${on}`);
+      throw new Error('pet:setAlwaysOnTop: on must be boolean');
+    }
+    logger.info(`[PetMode] setAlwaysOnTop on=${on}`);
+    const win = windowManager.getWindow();
+    win?.setAlwaysOnTop(on, on ? 'screen-saver' : undefined);
   });
 
-  ipcMain.handle('pet-mode:dragStart', (_event, payload: { x: number; y: number }) => {
-    console.log('[TODO P3] pet-mode:dragStart', payload);
+  // pet:dragStart({x, y}) — cursor의 창 내 위치 저장, 즉시 수행 없음 (Q-9 B안)
+  ipcMain.handle('pet:dragStart', (_event, payload: unknown) => {
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      !isFiniteNumber((payload as { x: unknown }).x) ||
+      !isFiniteNumber((payload as { y: unknown }).y)
+    ) {
+      logger.warn(`[PetMode] dragStart invalid payload: ${JSON.stringify(payload)}`);
+      throw new Error('pet:dragStart: payload.x and payload.y must be finite numbers');
+    }
+    const { x, y } = payload as { x: number; y: number };
+    logger.info(`[PetMode] dragStart x=${x} y=${y}`);
+    dragOffset = { x, y };
+  });
+
+  // pet:dragMove({screenX, screenY}) — 저장된 offset으로 창 이동 (Q-9 B안)
+  ipcMain.handle('pet:dragMove', (_event, payload: unknown) => {
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      !isFiniteNumber((payload as { screenX: unknown }).screenX) ||
+      !isFiniteNumber((payload as { screenY: unknown }).screenY)
+    ) {
+      logger.warn(`[PetMode] dragMove invalid payload: ${JSON.stringify(payload)}`);
+      throw new Error('pet:dragMove: payload.screenX and payload.screenY must be finite numbers');
+    }
+    if (!dragOffset) {
+      logger.warn('[PetMode] dragMove called without dragStart; no-op');
+      return;
+    }
+    const { screenX, screenY } = payload as { screenX: number; screenY: number };
+    const win = windowManager.getWindow();
+    if (!win) return;
+    const newX = Math.round(screenX - dragOffset.x);
+    const newY = Math.round(screenY - dragOffset.y);
+    win.setPosition(newX, newY);
+  });
+
+  // pet:dragEnd() — offset 초기화 + 최종 위치 영속화 (Q-12)
+  ipcMain.handle('pet:dragEnd', () => {
+    logger.info('[PetMode] dragEnd');
+    dragOffset = null;
+    const win = windowManager.getWindow();
+    if (win) {
+      const bounds = win.getBounds();
+      savePetWindowState(bounds);
+    }
   });
 }
 

@@ -17,6 +17,7 @@ import { CharacterConfigProvider } from "./context/character-config-context";
 import { Toaster } from "./components/ui/toaster";
 import { VADProvider } from "./context/vad-context";
 import { SpriteAvatarRenderer } from "./components/avatar/SpriteAvatarRenderer";
+import { PetDragHandle } from "./components/avatar/PetDragHandle";
 import TitleBar from "./components/electron/title-bar";
 import { InputSubtitle } from "./components/electron/input-subtitle";
 import { ProactiveSpeakProvider } from "./context/proactive-speak-context";
@@ -102,6 +103,8 @@ function AppContent(): JSX.Element {
       >
         {/* M_12 §3.3 DROP: Live2D → SpriteAvatarRenderer placeholder (P2에서 실제 구현) */}
         <SpriteAvatarRenderer showSidebar={showSidebar} />
+        {/* M_12 P3 §3.4 — 펫 모드 드래그 핸들 (mode=pet 시에만 렌더) */}
+        <PetDragHandle />
       </Box>
 
       {/* Conditional Rendering of Window UI */}
