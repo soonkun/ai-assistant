@@ -22,6 +22,7 @@ import { useBrowser } from '@/context/browser-context';
 import { useAvatarStore } from '@/store/avatar-store';
 import { useDndStore } from '@/store/dnd-store';
 import { useCaptureStore } from '@/store/capture-store';
+import { useProactiveStore } from '@/store/proactive-store';
 import { resolveEmotion, resolveCrossfadeMs } from '@/components/avatar/validators';
 
 function WebSocketHandler({ children }: { children: React.ReactNode }) {
@@ -320,8 +321,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
       }
 
       case 'ai-speak-signal': {
-        // M_11 §7.3: 서버→클라 프로액티브 발화 신호
-        // topic 검증 및 토스트 표시. 실제 후속 처리(audio 프레임 대기)는 P5.
+        // M_11 §7.3: 서버→클라 프로액티브 발화 신호.
+        // topic별 UI 분기 (M_12 §7.3 #2, §15.2). 후속 audio 프레임은 upstream 경로로 처리.
         const VALID_TOPICS = ['morning_briefing', 'event_reminder', 'idle_rest', 'overwork'] as const;
         type ProactiveTopic = typeof VALID_TOPICS[number];
         const topic = message.topic as string | undefined;
@@ -329,12 +330,52 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
           console.warn('[WS] ai-speak-signal: unknown or missing topic, ignoring.', message);
           break;
         }
-        console.info('[WS] ai-speak-signal received:', { topic, text: message.text, context: message.context });
-        toaster.create({
-          title: `프로액티브 [${topic}]`,
-          type: 'info',
-          duration: 3000,
-        });
+        const context = (message.context ?? {}) as Record<string, unknown>;
+        console.info('[WS] ai-speak-signal received:', { topic, text: message.text, context });
+        useProactiveStore.getState().setLastTopic(topic as ProactiveTopic);
+        switch (topic as ProactiveTopic) {
+          case 'morning_briefing': {
+            // §7.3 #2: 토스트 + "아침 브리핑 시작" 배지 1회 표시 (MorningBriefingBadge)
+            toaster.create({
+              title: '아침 브리핑 시작',
+              description: typeof message.text === 'string' ? message.text : undefined,
+              type: 'info',
+              duration: 5000,
+            });
+            useProactiveStore.getState().showMorningBriefingBadge();
+            break;
+          }
+          case 'event_reminder': {
+            // §7.3 #2: title=context.title, body="N분 뒤 시작", 10초 유지
+            const title = typeof context.title === 'string' ? context.title : '일정 알림';
+            const minutes = typeof context.minutes_until === 'number' ? context.minutes_until : 10;
+            toaster.create({
+              title,
+              description: `${minutes}분 뒤 시작`,
+              type: 'info',
+              duration: 10_000,
+            });
+            break;
+          }
+          case 'idle_rest': {
+            toaster.create({
+              title: '쉬었다 가세요',
+              description: typeof message.text === 'string' ? message.text : '잠시 휴식을 권합니다.',
+              type: 'info',
+              duration: 6000,
+            });
+            break;
+          }
+          case 'overwork': {
+            toaster.create({
+              title: '너무 오래 작업 중이에요',
+              description: typeof message.text === 'string' ? message.text : '잠시 휴식이 필요합니다.',
+              type: 'warning',
+              duration: 8000,
+            });
+            break;
+          }
+        }
         break;
       }
 

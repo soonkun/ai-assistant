@@ -1,10 +1,10 @@
 {
-  "name": "open-llm-vtuber",
+  "name": "saessagi-ai-assistant",
   "version": "1.2.1",
-  "description": "An Electron application with React and TypeScript",
+  "description": "사내 오프라인 멀티모달 AI 비서 — 새싹이 프로젝트 (Electron + React).",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "saessagi-project",
+  "homepage": "https://127.0.0.1",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
@@ -24,7 +24,9 @@
     "build:web": "vite build --config vite.config.ts --mode web",
     "extract-translations": "i18next-scanner --config i18next-scanner.config.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "playwright test --config=e2e/playwright.config.ts",
+    "e2e:install": "npm install --no-save @playwright/test@^1.44"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.2.3",

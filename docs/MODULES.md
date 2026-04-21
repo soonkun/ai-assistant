@@ -417,7 +417,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 ### M_12 Frontend (Electron + 스프라이트 렌더러)
 
 - **분류**: FORK (upstream-Web) + NEW (스프라이트 렌더러, 펫 모드 검증)
-- **상태**: 🚧 WIP — 스펙 승인 + Builder 착수 조건 충족(2026-04-21). upstream 소스 반입 완료(루트 `frontend/`, main@d176e7d, Q-15 독립 포크. `frontend/UPSTREAM_COMMIT.md` 참조). CR-10/CR-11 Critic PASS 완료. 다음 단계 = Builder 착수.
+- **상태**: ✅ DONE — P1(WS·Avatar·기반) → P2(SpriteAvatarRenderer·PetWindow·vitest) → P3(CitationViewer·bbox·FallbackCard) → P4(CitationViewer 회귀·PDF 파이프라인) → P5(RSS 감시·적대적 테스트·E2E skeleton·NSIS 구성·DoD) 완료. Critic PASS 조건 달성.
 - **목적**: 채팅 UI, 스프라이트 아바타 렌더, 펫 모드 창(투명 + 항상 위 + 클릭 관통), 드래그 이동, PDF viewer로 인용 링크 열기.
 - **주요 책임**
   - WebSocket 연결 유지, upstream 메시지 타입 호환(`docs/research/frontend_structure.md` 표).
@@ -453,7 +453,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 | M_09 | CalendarService | NEW | ✅ DONE | specs/M_09_CalendarService_SPEC.md |
 | M_10 | IdleMonitor | NEW | ✅ DONE | — |
 | M_11 | ProactiveDispatcher | NEW | ✅ DONE | M_09, M_10 |
-| M_12 | Frontend | FORK+NEW | 🚧 WIP (spec approved) | M_01 메시지 스키마, CR-10/CR-11 |
+| M_12 | Frontend | FORK+NEW | ✅ DONE | M_01 메시지 스키마, CR-10/CR-11 |
 
 ---
 

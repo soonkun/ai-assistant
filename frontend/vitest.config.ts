@@ -9,6 +9,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // e2e/ 디렉터리는 playwright 전용. vitest는 src/ 내 단위 테스트만 실행.
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['e2e/**', 'node_modules/**'],
   },
   resolve: {
     alias: {

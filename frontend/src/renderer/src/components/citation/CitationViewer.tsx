@@ -15,6 +15,8 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { SearchHit, CitationViewerHandle } from './types';
 import { pdfBboxToViewport } from './bbox';
 import { FallbackCard } from './FallbackCard';
+import { toaster } from '@/components/ui/toaster';
+import { readRendererRSS, shouldAbortPdfRender } from './rss-guard';
 
 // §8.3.3 — workerSrc는 반드시 로컬 번들 경로. CDN 금지.
 // CRITICAL-2 수정: 루트 절대경로 '/assets/...'는 file:// 프로덕션에서 drive-root로
@@ -95,6 +97,20 @@ export const CitationViewer = forwardRef<CitationViewerHandle, CitationViewerPro
           pdfDocRef.current = pdfDoc;
 
           // step 3: getPage → render
+          // §13.3 A-2: 페이지 렌더 직전 RSS 확인. 임계 초과 시 중단.
+          if (shouldAbortPdfRender(readRendererRSS())) {
+            console.warn('[CitationViewer] RSS limit exceeded — aborting PDF render');
+            cleanupPdf();
+            toaster.create({
+              title: 'PDF 뷰어 메모리 초과',
+              description: '문서 크기가 너무 큽니다. 뷰어를 닫습니다.',
+              type: 'error',
+              duration: 4000,
+            });
+            setRenderError(pendingPdfHit);
+            return;
+          }
+
           const page = await pdfDoc.getPage(pendingPdfHit.page);
           if (cancelled) return;
           const viewport = page.getViewport({ scale: DEFAULT_SCALE });

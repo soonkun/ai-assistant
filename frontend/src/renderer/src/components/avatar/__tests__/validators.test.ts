@@ -1,4 +1,4 @@
-// M_12 §7.2·§8.3 D-3 — avatar-state payload 검증 헬퍼 단위 테스트.
+// M_12 §7.2·§8.3 D-3·§13.3 A-1 — avatar-state payload 검증 헬퍼 단위 테스트.
 
 import { describe, it, expect } from 'vitest';
 import { resolveEmotion, resolveCrossfadeMs } from '../validators';
@@ -20,6 +20,20 @@ describe('resolveEmotion', () => {
     expect(resolveEmotion(null)).toBe('neutral');
     expect(resolveEmotion(42)).toBe('neutral');
     expect(resolveEmotion({ emotion: 'happy' })).toBe('neutral');
+  });
+});
+
+describe('resolveEmotion — §13.3 A-1 악성 문자열 (WS handler 통합 경로)', () => {
+  it('A-1a: XSS 문자열 emotion → neutral 폴백 (DOM 오염 방지)', () => {
+    // WS 핸들러가 resolveEmotion을 통과시키므로 여기서 커버.
+    // 원본 문자열이 절대 Emotion 값으로 store에 들어가지 않음.
+    expect(resolveEmotion('<script>alert(1)</script>')).toBe('neutral');
+    expect(resolveEmotion('"><img src=x onerror=alert(1)>')).toBe('neutral');
+  });
+
+  it('A-1b: 공백·특수문자 포함 emotion → neutral 폴백', () => {
+    expect(resolveEmotion('happy; DROP TABLE')).toBe('neutral');
+    expect(resolveEmotion('  happy  ')).toBe('neutral'); // trim 없이 exact match만
   });
 });
 

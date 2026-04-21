@@ -18,6 +18,7 @@ import { Toaster } from "./components/ui/toaster";
 import { VADProvider } from "./context/vad-context";
 import { SpriteAvatarRenderer } from "./components/avatar/SpriteAvatarRenderer";
 import { PetDragHandle } from "./components/avatar/PetDragHandle";
+import { MorningBriefingBadge } from "./components/proactive/MorningBriefingBadge";
 import TitleBar from "./components/electron/title-bar";
 import { InputSubtitle } from "./components/electron/input-subtitle";
 import { ProactiveSpeakProvider } from "./context/proactive-speak-context";
@@ -126,6 +127,10 @@ function AppContent(): JSX.Element {
               <Background />
               <Box position="absolute" top="20px" left="20px" zIndex={10}>
                 <WebSocketStatus />
+              </Box>
+              {/* M_12 §7.3 #2: morning_briefing 배지 (채팅 영역 상단) */}
+              <Box position="absolute" top="60px" left="20px" zIndex={10}>
+                <MorningBriefingBadge />
               </Box>
               <Box
                 position="absolute"

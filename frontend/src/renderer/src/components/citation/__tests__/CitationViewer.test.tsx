@@ -1,10 +1,25 @@
-// M_12 P4 §8.3 — CitationViewer 컴포넌트 단위 테스트 (≥4건)
+// M_12 P4·P5 §8.3·§13.3 A-2 — CitationViewer 컴포넌트 단위 테스트 (≥5건)
 // pdf.js는 vi.mock으로 대체. jsdom 환경에서 canvas는 mock 처리.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import React from 'react';
 import type { CitationViewerHandle, SearchHit } from '../types';
 import { CitationViewer } from '../CitationViewer';
+
+// toaster mock — toaster.create 호출 검증용
+vi.mock('@/components/ui/toaster', () => ({
+  toaster: { create: vi.fn() },
+}));
+
+// rss-guard mock — shouldAbortPdfRender 제어용
+vi.mock('../rss-guard', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../rss-guard')>();
+  return {
+    ...actual,
+    readRendererRSS: vi.fn(() => null),
+    shouldAbortPdfRender: vi.fn(() => false),
+  };
+});
 
 // pdf.js mock — vi.mock은 파일 최상단으로 hoisting됨
 vi.mock('pdfjs-dist', () => {
@@ -194,5 +209,43 @@ describe('CitationViewer', () => {
     });
 
     expect(mockDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  // 테스트 #6 — §13.3 A-2: RSS 임계 초과 시 폴백 전환 + 에러 토스트
+  it('#6 RSS 임계 초과 → FallbackCard 전환 + 에러 토스트 (§13.3 A-2)', async () => {
+    // vi.mocked를 사용해 타입 안전하게 mock 제어
+    const rssGuard = await import('../rss-guard');
+    const mockShouldAbort = vi.mocked(rssGuard.shouldAbortPdfRender);
+    // 이 테스트에서만 RSS 초과로 설정
+    mockShouldAbort.mockReturnValueOnce(true);
+
+    const toasterMod = await import('@/components/ui/toaster');
+    const mockToasterCreate = vi.mocked(toasterMod.toaster.create);
+    mockToasterCreate.mockClear();
+
+    const ref = React.createRef<CitationViewerHandle>();
+    render(<CitationViewer ref={ref} />);
+
+    const hit: SearchHit = {
+      source_path: '/docs/heavy.pdf',
+      page: 1,
+    };
+
+    await act(async () => {
+      await ref.current?.openCitation(hit);
+    });
+    // useEffect flush
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // FallbackCard가 렌더되어야 함
+    expect(screen.getByText(/원본 경로/i)).toBeTruthy();
+    // 에러 토스트 호출 확인
+    expect(mockToasterCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error' }),
+    );
   });
 });

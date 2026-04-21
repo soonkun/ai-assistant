@@ -1,6 +1,7 @@
 // M_12 P4 §8.3.2 — 비-PDF 포맷 폴백 카드 컴포넌트
 import React from 'react';
 import type { SearchHit } from './types';
+import { toaster } from '@/components/ui/toaster';
 
 interface FallbackCardProps {
   hit: SearchHit;
@@ -23,16 +24,21 @@ export function FallbackCard({ hit }: FallbackCardProps): React.JSX.Element {
       if (result && result.length > 0) {
         // 결과 문자열이 비어 있지 않으면 에러 (Electron 규약)
         console.error('[FallbackCard] shell.openPath error:', result);
-        // toaster가 있으면 에러 표시 — 없는 경우 alert fallback
-        const toaster = (window as unknown as { toaster?: { error(msg: string): void } }).toaster;
-        if (toaster?.error) {
-          toaster.error(`파일을 열 수 없습니다: ${result}`);
-        } else {
-          alert(`파일을 열 수 없습니다: ${result}`);
-        }
+        toaster.create({
+          title: '파일을 열 수 없습니다',
+          description: result,
+          type: 'error',
+          duration: 4000,
+        });
       }
     } catch (err) {
       console.error('[FallbackCard] shell.openPath threw:', err);
+      toaster.create({
+        title: '파일 열기 실패',
+        description: err instanceof Error ? err.message : String(err),
+        type: 'error',
+        duration: 4000,
+      });
     }
   };
 

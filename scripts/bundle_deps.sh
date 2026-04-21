@@ -24,9 +24,11 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 WHEELS_DIR="${PROJECT_ROOT}/assets/wheels"
 MODELS_DIR="${PROJECT_ROOT}/assets/models"
+NPM_CACHE_DIR="${PROJECT_ROOT}/assets/npm_cache"  # M_12 §12.2 frontend 오프라인 번들
 
 mkdir -p "${WHEELS_DIR}"
 mkdir -p "${MODELS_DIR}"
+mkdir -p "${NPM_CACHE_DIR}"
 
 echo "=== [bundle_deps.sh] Python 패키지 wheel 다운로드 ==="
 echo "  대상 디렉토리: ${WHEELS_DIR}"
@@ -151,10 +153,44 @@ pip download \
     "APScheduler>=3.10,<4" \
     --dest "${WHEELS_DIR}"
 
+
+# ==============================================================================
+# M_12 Frontend npm 캐시 (§12.2 / §15.2)
+# ------------------------------------------------------------------------------
+# frontend/ 디렉토리의 node_modules를 오프라인에서 재구성할 수 있도록
+# npm 캐시를 assets/npm_cache로 수집한다. Q-14 화이트리스트 정책에 따라
+# electron·electron-builder·electron-rebuild·canvas만 postinstall 허용.
+#
+# 실행 조건: frontend/package-lock.json이 최신 상태여야 한다.
+# 오프라인 설치 시 frontend/에서 `npm ci --offline --cache=<asset_path>` 실행.
+# ==============================================================================
+
+FRONTEND_DIR="${PROJECT_ROOT}/frontend"
+if [ -f "${FRONTEND_DIR}/package-lock.json" ]; then
+    echo ""
+    echo "[npm] frontend/ 캐시 수집 → ${NPM_CACHE_DIR}"
+    # npm cache는 tarball + metadata. --prefer-offline로 네트워크 최소화.
+    (
+        cd "${FRONTEND_DIR}"
+        npm ci \
+            --cache "${NPM_CACHE_DIR}" \
+            --prefer-offline \
+            --ignore-scripts \
+            --no-audit \
+            --no-fund
+    )
+    echo "[npm] 완료. 오프라인 PC에서 재현: cd frontend && npm ci --offline --cache=${NPM_CACHE_DIR}"
+else
+    echo "[npm] ${FRONTEND_DIR}/package-lock.json 부재 — M_12 frontend 빌드 전 생략"
+fi
+
 echo ""
 echo "=== [bundle_deps.sh] 완료 ==="
-echo "  wheels : ${WHEELS_DIR}"
-echo "  models : ${MODELS_DIR}"
+echo "  wheels    : ${WHEELS_DIR}"
+echo "  models    : ${MODELS_DIR}"
+echo "  npm cache : ${NPM_CACHE_DIR}"
 echo ""
 echo "다음 단계: assets/ 디렉토리를 통째로 오프라인 배포 패키지에 포함시킨다."
-echo "오프라인 설치 시 'pip install --no-index --find-links=${WHEELS_DIR} faster-whisper ctranslate2 jsonschema mss Pillow'"
+echo "오프라인 설치 시:"
+echo "  pip install --no-index --find-links=${WHEELS_DIR} faster-whisper ctranslate2 jsonschema mss Pillow"
+echo "  cd frontend && npm ci --offline --cache=${NPM_CACHE_DIR}"
