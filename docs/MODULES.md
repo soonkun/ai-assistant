@@ -97,7 +97,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 ### M_04 TTSEngine (MeloTTS 한국어 + XTTS v2 옵션)
 
 - **분류**: NEW (upstream TTSInterface 준수)
-- **상태**: 🔲 TODO
+- **상태**: ✅ DONE (Critic PASS 4차, reviews/M_04_TTSEngine_REVIEW.md; 잔존 minor m21~m24는 릴리즈 차단 아님 — R-05 MeloTTS 한국어 QA·CR-01 패키지 설치·CR-02 XTTS 법무 승인은 빌드/배포 마일스톤에서 처리)
 - **목적**: 한국어 TTS 엔진 구현. 기본 MeloTTS, 사용자가 옵트인 시 XTTS v2로 전환. 화자 참조(WAV 3~6초) 업로드 API 포함.
 - **공개 API**
   ```python
@@ -417,7 +417,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 ### M_12 Frontend (Electron + 스프라이트 렌더러)
 
 - **분류**: FORK (upstream-Web) + NEW (스프라이트 렌더러, 펫 모드 검증)
-- **상태**: ✅ DONE — P1(WS·Avatar·기반) → P2(SpriteAvatarRenderer·PetWindow·vitest) → P3(CitationViewer·bbox·FallbackCard) → P4(CitationViewer 회귀·PDF 파이프라인) → P5(RSS 감시·적대적 테스트·E2E skeleton·NSIS 구성·DoD) 완료. Critic PASS 조건 달성.
+- **상태**: ✅ DONE — P1(WS·Avatar·기반) → P2(SpriteAvatarRenderer·PetWindow·vitest) → P3(CitationViewer·bbox·FallbackCard) → P4(CitationViewer 회귀·PDF 파이프라인) → P5(RSS 감시·적대적 테스트·E2E skeleton·NSIS 구성·DoD) 완료. Critic PASS 조건 달성. **Windows QA pending**(reviews/M_12_Frontend_P5_DOD.md §66): `PetWindowController.enable()` E2E, click-through hover IPC, CSP 실차단, RSS 350MB·펫 모드 CPU 2% 벤치, electron-builder NSIS, Playwright 3종(pet-mode/citation/basic) — 모두 WSL 제약으로 skeleton만 준비, Windows 실기기에서 수행.
 - **목적**: 채팅 UI, 스프라이트 아바타 렌더, 펫 모드 창(투명 + 항상 위 + 클릭 관통), 드래그 이동, PDF viewer로 인용 링크 열기.
 - **주요 책임**
   - WebSocket 연결 유지, upstream 메시지 타입 호환(`docs/research/frontend_structure.md` 표).
