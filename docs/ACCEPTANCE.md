@@ -3,6 +3,7 @@
 본 문서는 `docs/E2E_SCENARIOS.md §5` 수락 기준을 "사용자 관점에서 무엇이 어떻게 보이면 OK인지" 관찰 가능한 형태로 명시한다.
 
 - 작성일: 2026-04-19
+- 최종 갱신: 2026-04-23 (M_06 DONE — E2E-10 추가)
 - 대상 Phase: Phase 3 — 모듈 통합 E2E
 - 기반 문서: `docs/E2E_SCENARIOS.md`
 - 실행 환경: Linux (WSL2) — e2e_fast 스위트 (모델 미기동 환경)
@@ -15,12 +16,12 @@
 
 | 항목 | 기준 | 현재 상태 |
 |---|---|---|
-| 골든 패스 (E2E-01~09) | 9건 PASS | E2E-01, 05, 06, 07(×7), 09 PASS; E2E-02/03/04/08 e2e_model skip (모델 미배치) |
+| 골든 패스 (E2E-01~09, E2E-10) | 10건 PASS | E2E-01, 05, 06, 07(×7), 09, 10 PASS; E2E-02/03/04/08 e2e_model skip (모델 미배치) |
 | 엣지/회복 (E2E-20~27) | 8건 PASS | E2E-20, 22, 24, 25, 26, 27 PASS; E2E-21 skip (Whisper 모델); E2E-23 PASS |
 | 적대적 (E2E-30~33) | 4건 PASS | E2E-30, 31, 32, 33 PASS |
 | 정적 가드 | 1건 PASS | test_static_guard.py PASS |
 
-**CI (e2e_fast) 결과**: 23 passed, 6 deselected (e2e_model 제외), 0 failed
+**CI (e2e_fast) 결과**: 24 passed (E2E-10 추가), 6 deselected (e2e_model 제외), 0 failed
 
 ---
 
@@ -113,6 +114,7 @@
 | E2E-07 | Gemma 응답의 감정 태그 → 아바타 표정 전환 (7종 모두) | AvatarState 직접 테스트 |
 | E2E-08 | search_docs → 인용 포맷 문자열 형태 검증 | RagService.format_citation |
 | E2E-09 | 10분 전 일정 → event_reminder 발화 | 실제 AsyncIOScheduler interval |
+| E2E-10 | HWPX 파일 인제스트 → VectorStore 저장 → 검색 → 인용 포맷 + 멱등성 | FakeEmbedder + DocumentIngest 실제 파이프라인 |
 
 ### 엣지/회복
 
@@ -153,7 +155,26 @@ pytest tests/e2e/ -m e2e_fast --cov=src/app --cov=src/proactive --cov=src/tool_r
 
 ---
 
-## 4. 잔여 작업
+## 4. E2E-10 수락 기준 (M_06 DONE 연동)
+
+### E2E-10-document-ingest-pipeline
+
+| 수락 기준 ID | 사용자 관점 | 검증 방법 | 상태 |
+|---|---|---|---|
+| AC-10-1 | HWPX 파일을 인제스트하면 1건 이상의 청크가 VectorStore에 저장된다 | `ingest_file()` 반환값 > 0 | PASS |
+| AC-10-2 | 저장된 청크를 vector 검색하면 파일명(`sample_2011.hwpx`)이 결과에 포함된다 | `VectorStore.search()` 결과 doc_name 확인 | PASS |
+| AC-10-3 | 동일 파일을 두 번 인제스트해도 VectorStore row 수가 늘어나지 않는다 (중복 없음) | 재-ingest 전후 row 수 동일 확인 | PASS |
+| AC-10-4 | 청크 텍스트로 검색하면 `found=True`를 반환한다 | `RagService.retrieve()` found 필드 확인 | PASS |
+| AC-10-5 | 인용 포맷 결과가 `` `<doc_name>` `` 백틱 패턴을 포함한다 | `RagService.format_citation()` 결과 확인 | PASS |
+
+- 마커: `e2e_fast` (FakeEmbedder 사용, BGE-M3 모델 불필요)
+- 실행 시간: ≤ 15초
+- 픽스처: `tests/document_ingest/fixtures/sample_2011.hwpx` (합성 HWPX)
+- `tests/e2e/fixtures/seed_rag.py`에 `seed_via_ingest()` helper 추가 (M_06 경로)
+
+---
+
+## 5. 잔여 작업
 
 | 항목 | 이유 | 다음 단계 |
 |---|---|---|

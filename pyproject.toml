@@ -22,7 +22,7 @@ dependencies = [
     # PENDING: MeloTTS PyPI 패키지명 확정 필요 — myshell-ai/MeloTTS는 PyPI에 공식 게시되지 않음.
     # 오프라인 번들 확정 시 git+URL 또는 wheel 경로로 대체할 것.
     # "melo>=0.1",           # PENDING: 패키지명 확정 필요 (PyPI 미등록, git install 권장)
-    "TTS>=0.22.0,<1",      # Coqui XTTS v2 — CPML 라이선스 주의
+    "TTS>=0.22.0,<1; python_version < '3.12' and sys_platform == 'win32'",  # Coqui XTTS v2 — CPML 라이선스·Python<3.12·Windows 전용 (CR-02 법무 승인 대기)
     "torch>=2.0.0",         # MeloTTS + XTTS v2 딥러닝 런타임
     "soundfile>=0.12,<1",   # WAV I/O 보조 (libsndfile 기반)
     "python-multipart>=0.0.9",  # FastAPI UploadFile multipart 지원
@@ -169,4 +169,11 @@ markers = [
     "e2e: 전체 E2E 스위트 (e2e_fast + e2e_model 합집합)",
     "e2e_fast: 모델 없이 돌 수 있는 빠른 E2E (CI 대상)",
     "e2e_model: 실제 Gemma/Whisper/MeloTTS/BGE-M3 필요 (로컬/스테이지 전용)",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-timeout>=2.4.0",
 ]

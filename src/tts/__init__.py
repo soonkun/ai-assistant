@@ -9,7 +9,11 @@ from .errors import TTSInitError, TTSRuntimeError
 from .melo_tts_engine import MeloTTSEngine
 from .speaker_wav import ALLOWED_SAMPLE_RATES, SpeakerWavInfo, validate_speaker_wav
 from .upload import SpeakerWavListItem, SpeakerWavUploadResponse, create_speaker_upload_router
-from .xtts_v2_engine import XttsV2Engine
+
+try:
+    from .xtts_v2_engine import XttsV2Engine
+except Exception:  # TTS 패키지 미설치(macOS/Python 3.12) 시 skip
+    XttsV2Engine = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 

@@ -103,6 +103,80 @@ for _pkg in _MOCK_PACKAGES:
     sys.modules[_pkg] = _mock  # type: ignore[assignment]
 
 
+# Fix: upstream base classes (ServiceContext, WebSocketHandler) must be real classes so
+# that AppServiceContext / AppWebSocketHandler inherit properly. When these upstream
+# modules are mocked as MagicMocks, Python's metaclass mechanism turns the subclasses
+# into MagicMocks too — breaking MagicMock(spec=SubClass) on Python 3.12.
+if "open_llm_vtuber.service_context" in sys.modules and isinstance(
+    sys.modules["open_llm_vtuber.service_context"], MagicMock
+):
+
+    class _ServiceContextStub:
+        def __init__(self) -> None:
+            self.vad_engine = None
+            self.tts_engine = None
+            self.character_config = MagicMock()
+            self.agent_engine = None
+            self.system_prompt = ""
+            self.tool_manager = None
+            self.tool_executor = None
+            self.client_contexts: dict = {}
+
+        def init_vad(self, vad_config: object) -> None:
+            pass
+
+        def init_tts(self, tts_config: object) -> None:
+            pass
+
+        async def load_from_config(self, config: object) -> None:
+            pass
+
+        async def close(self) -> None:
+            pass
+
+        async def construct_system_prompt(self, persona_prompt: str) -> str:
+            return ""
+
+    sys.modules["open_llm_vtuber.service_context"].ServiceContext = _ServiceContextStub
+
+if "open_llm_vtuber.websocket_handler" in sys.modules and isinstance(
+    sys.modules["open_llm_vtuber.websocket_handler"], MagicMock
+):
+
+    class _WebSocketHandlerStub:
+        def __init__(self, default_context_cache: object) -> None:
+            self.default_context_cache = default_context_cache
+            self.client_contexts: dict = {}
+            self.client_connections: dict = {}
+            self.chat_group_manager = MagicMock()
+            self.current_conversation_tasks: dict = {}
+            self.received_data_buffers: dict = {}
+
+        def _init_message_handlers(self) -> dict:
+            # Upstream handler stubs — tests check for their presence.
+            return {
+                "text-input": MagicMock(),
+                "heartbeat": MagicMock(),
+                "interrupt-signal": MagicMock(),
+            }
+
+        async def handle_new_connection(self, websocket: object, client_uid: str) -> None:
+            pass
+
+        async def handle_disconnect(self, client_uid: str) -> None:
+            pass
+
+        async def handle_websocket_communication(self, websocket: object, client_uid: str) -> None:
+            pass
+
+        async def _handle_conversation_trigger(
+            self, websocket: object, client_uid: str, data: object
+        ) -> None:
+            pass
+
+    sys.modules["open_llm_vtuber.websocket_handler"].WebSocketHandler = _WebSocketHandlerStub
+
+
 def _register_src_module(name: str) -> None:
     """tests/<name>/__init__.py가 pytest에 의해 '<name>' 패키지로 잘못 인식되는 것을 방지.
 

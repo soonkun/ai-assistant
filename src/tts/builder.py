@@ -8,14 +8,19 @@ from typing import TYPE_CHECKING, Union
 
 from .errors import TTSInitError
 from .melo_tts_engine import MeloTTSEngine
-from .xtts_v2_engine import XttsV2Engine
 
 if TYPE_CHECKING:
     from app.config import AppConfig
+    from .xtts_v2_engine import XttsV2Engine
 
 logger = logging.getLogger(__name__)
 
-TtsEngine = Union[MeloTTSEngine, XttsV2Engine]
+try:
+    from .xtts_v2_engine import XttsV2Engine as _XttsV2Engine
+    TtsEngine = Union[MeloTTSEngine, _XttsV2Engine]
+except Exception:
+    # TTS 패키지 미설치(macOS/Python 3.12 등) — MeloTTS 단독 운용
+    TtsEngine = MeloTTSEngine  # type: ignore[assignment,misc]
 
 
 def resolve_melotts_dir(asset_root: str = "assets/models") -> str:
