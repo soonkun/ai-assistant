@@ -125,6 +125,17 @@ class TestWin32BackendImport:
         with pytest.raises(BackendInitError, match="Windows"):
             backend.start()
 
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
+    def test_win32_backend_start_succeeds_on_windows(self) -> None:
+        """Windows에서 Win32IdleBackend.start() 성공 (windll 심볼 resolve)."""
+        from idle_monitor.backends.win32_backend import Win32IdleBackend
+
+        backend = Win32IdleBackend()
+        backend.start()
+        assert backend._get_last_input_info is not None
+        assert backend._get_tick_count is not None
+        backend.stop()
+
 
 class TestSelectBackend:
     """_select_backend() 분기 테스트."""
@@ -246,3 +257,27 @@ class TestServiceStartWithEventLoop:
         monitor = IdleMonitor(clock=FakeClock(t0))
         with pytest.raises(RuntimeError, match="running event loop"):
             monitor.start()
+
+
+class TestNoopBackendNonWindows:
+    """비-Windows(macOS/Linux) 환경에서 NoopBackend가 올바르게 기동·정지됨을 확인."""
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows only — use Win32/pynput backend")
+    @pytest.mark.asyncio
+    async def test_noop_backend_start_stop_no_exception_on_non_windows(self, t0: datetime) -> None:
+        """비-Windows에서 NoopBackend를 통한 IdleMonitor start()/stop() 예외 없음.
+
+        _select_backend()가 NoopBackend를 반환하는 macOS/Linux 경로를 end-to-end로 검증.
+        """
+        from idle_monitor import IdleMonitor
+
+        clock = FakeClock(t0)
+        monitor = IdleMonitor(clock=clock)
+
+        # 이벤트 루프 안에서 start() 호출 — NoopBackend 경로
+        monitor.start()
+        assert monitor._started is True
+        assert isinstance(monitor._backend, NoopBackend)
+
+        await monitor.stop()
+        assert monitor._started is False

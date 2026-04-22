@@ -65,6 +65,28 @@ _MOCK_PACKAGES = [
     "soundfile",
     # M_05 LLMAgent — anthropic SDK는 사용 안 하지만 upstream import가 요구
     "anthropic",
+    # upstream Open-LLM-VTuber — git clone 없는 환경(macOS 개발 머신 등)에서 mock 등록
+    "open_llm_vtuber",
+    "open_llm_vtuber.asr",
+    "open_llm_vtuber.asr.asr_interface",
+    "open_llm_vtuber.tts",
+    "open_llm_vtuber.tts.tts_interface",
+    "open_llm_vtuber.agent",
+    "open_llm_vtuber.agent.agents",
+    "open_llm_vtuber.agent.agents.agent_interface",
+    "open_llm_vtuber.agent.agents.basic_memory_agent",
+    "open_llm_vtuber.agent.input_types",
+    "open_llm_vtuber.agent.stateless_llm",
+    "open_llm_vtuber.agent.stateless_llm.openai_compatible_llm",
+    "open_llm_vtuber.config_manager",
+    "open_llm_vtuber.config_manager.utils",
+    "open_llm_vtuber.mcpp",
+    "open_llm_vtuber.mcpp.tool_executor",
+    "open_llm_vtuber.mcpp.tool_manager",
+    "open_llm_vtuber.routes",
+    "open_llm_vtuber.server",
+    "open_llm_vtuber.service_context",
+    "open_llm_vtuber.websocket_handler",
 ]
 for _pkg in _MOCK_PACKAGES:
     if _pkg in sys.modules:
@@ -80,62 +102,44 @@ for _pkg in _MOCK_PACKAGES:
     _mock = _make_mock_package(_pkg)
     sys.modules[_pkg] = _mock  # type: ignore[assignment]
 
-# tests/app/__init__.py가 pytest에 의해 'app' 패키지로 잘못 인식되는 것을 방지.
-# src/app을 올바른 'app' 모듈로 sys.modules에 미리 등록.
-if "app" not in sys.modules:
-    import importlib.util
 
-    spec = importlib.util.spec_from_file_location(
-        "app",
-        str(_SRC / "app" / "__init__.py"),
-        submodule_search_locations=[str(_SRC / "app")],
+def _register_src_module(name: str) -> None:
+    """tests/<name>/__init__.py가 pytest에 의해 '<name>' 패키지로 잘못 인식되는 것을 방지.
+
+    src/<name>을 올바른 '<name>' 모듈로 sys.modules에 미리 등록한다.
+    upstream 없는 개발 환경(macOS 등)에서 로드 실패 시 경고만 출력하고 계속 진행.
+    """
+    import importlib.util as _iu
+
+    if name in sys.modules:
+        return
+
+    _spec = _iu.spec_from_file_location(
+        name,
+        str(_SRC / name / "__init__.py"),
+        submodule_search_locations=[str(_SRC / name)],
     )
-    if spec and spec.loader:
-        _app_module = importlib.util.module_from_spec(spec)
-        sys.modules["app"] = _app_module
-        spec.loader.exec_module(_app_module)  # type: ignore[union-attr]
+    if not (_spec and _spec.loader):
+        return
 
-# tests/vad/__init__.py가 pytest에 의해 'vad' 패키지로 잘못 인식되는 것을 방지.
-# src/vad를 올바른 'vad' 모듈로 sys.modules에 미리 등록.
-if "vad" not in sys.modules:
-    import importlib.util as _importlib_util_vad
+    _mod = _iu.module_from_spec(_spec)
+    sys.modules[name] = _mod
+    try:
+        _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+    except Exception as _exc:
+        # upstream 미설치 환경에서 일부 src 모듈이 로드 실패할 수 있다.
+        # 해당 모듈의 tests가 직접 실행될 때 import 오류가 다시 발생하므로
+        # 여기서는 경고만 남기고 계속 진행한다.
+        import warnings
 
-    _vad_spec = _importlib_util_vad.spec_from_file_location(
-        "vad",
-        str(_SRC / "vad" / "__init__.py"),
-        submodule_search_locations=[str(_SRC / "vad")],
-    )
-    if _vad_spec and _vad_spec.loader:
-        _vad_module = _importlib_util_vad.module_from_spec(_vad_spec)
-        sys.modules["vad"] = _vad_module
-        _vad_spec.loader.exec_module(_vad_module)  # type: ignore[union-attr]
+        warnings.warn(
+            f"conftest: src/{name} 모듈 사전 등록 실패 ({type(_exc).__name__}: {_exc}). "
+            "해당 모듈 테스트는 import 오류가 날 수 있음.",
+            stacklevel=2,
+        )
+        # 실패한 모듈을 sys.modules에 남겨두면 이후 import 시 혼란을 줄 수 있으므로 제거.
+        sys.modules.pop(name, None)
 
-# tests/asr/__init__.py가 pytest에 의해 'asr' 패키지로 잘못 인식되는 것을 방지.
-# src/asr를 올바른 'asr' 모듈로 sys.modules에 미리 등록.
-if "asr" not in sys.modules:
-    import importlib.util as _importlib_util
 
-    _asr_spec = _importlib_util.spec_from_file_location(
-        "asr",
-        str(_SRC / "asr" / "__init__.py"),
-        submodule_search_locations=[str(_SRC / "asr")],
-    )
-    if _asr_spec and _asr_spec.loader:
-        _asr_module = _importlib_util.module_from_spec(_asr_spec)
-        sys.modules["asr"] = _asr_module
-        _asr_spec.loader.exec_module(_asr_module)  # type: ignore[union-attr]
-
-# tests/tts/__init__.py가 pytest에 의해 'tts' 패키지로 잘못 인식되는 것을 방지.
-# src/tts를 올바른 'tts' 모듈로 sys.modules에 미리 등록.
-if "tts" not in sys.modules:
-    import importlib.util as _importlib_util_tts
-
-    _tts_spec = _importlib_util_tts.spec_from_file_location(
-        "tts",
-        str(_SRC / "tts" / "__init__.py"),
-        submodule_search_locations=[str(_SRC / "tts")],
-    )
-    if _tts_spec and _tts_spec.loader:
-        _tts_module = _importlib_util_tts.module_from_spec(_tts_spec)
-        sys.modules["tts"] = _tts_module
-        _tts_spec.loader.exec_module(_tts_module)  # type: ignore[union-attr]
+for _src_mod_name in ("app", "vad", "asr", "tts"):
+    _register_src_module(_src_mod_name)

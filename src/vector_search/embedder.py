@@ -90,9 +90,12 @@ class Embedder:
                 if torch.cuda.is_available() and torch.cuda.device_count() >= 1:
                     logger.info("auto device: CUDA 감지 → cuda:0 사용")
                     return "cuda"
+                if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                    logger.info("auto device: MPS 감지 → mps 사용 (Apple Silicon)")
+                    return "mps"
             except ImportError:
                 pass
-            logger.info("auto device: CUDA 미감지 → cpu 사용")
+            logger.info("auto device: CUDA/MPS 미감지 → cpu 사용")
             return "cpu"
         # 알 수 없는 device 값은 그대로 전달 (sentence-transformers가 처리)
         return device

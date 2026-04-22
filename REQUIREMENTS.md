@@ -3,7 +3,10 @@
 ## 0. 배포 환경
 
 - **완전 오프라인**: 사내 인트라넷 PC, 외부 인터넷 차단.
-- **OS**: Windows 10/11 **전용**. Linux/macOS 지원 계획 없음.
+- **OS (배포 타깃)**: Windows 10/11 **전용**. 배포 번들·인스톨러는 Windows 10/11 전용 유지.
+  - **개발 환경**: macOS 14+ (Apple Silicon), Linux (x86-64/ARM) 지원.
+    배포 번들·인스톨러는 Windows 10/11 전용 유지.
+  - **GPU 가속**: Windows: CUDA (NVIDIA), macOS: MPS (Metal), Linux: CUDA 또는 CPU 자동 감지.
 - **하드웨어 전제**: CPU 8코어 이상, RAM 16GB 이상, GPU 없어도 동작해야 함(있으면 가속).
 - **설치 방식**: 오프라인 번들 (모델 GGUF, Python 휠, npm 패키지 캐시 포함)로 단일 인스톨러 제공.
 

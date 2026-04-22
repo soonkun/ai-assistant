@@ -362,12 +362,16 @@ class TestEmbedderDeviceResolutionMock:
     def test_auto_device_falls_back_to_cpu_when_cuda_unavailable(
         self, tmp_path: Path, fake_st_module: MagicMock
     ) -> None:
-        """MT-14: device='auto', CUDA 불가 → cpu로 fallback."""
+        """MT-14: device='auto', CUDA 불가 + MPS 불가 → cpu로 fallback."""
         model_dir = _make_model_dir(tmp_path)
         fake_st_module.return_value = MagicMock()
         fake_st_module.side_effect = None
 
-        with patch("torch.cuda.is_available", return_value=False):
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.backends.mps.is_available", return_value=False),
+            patch("torch.backends.mps.is_built", return_value=False),
+        ):
             from vector_search.embedder import Embedder
 
             embedder = Embedder(model_dir=str(model_dir), device="auto")
@@ -391,6 +395,25 @@ class TestEmbedderDeviceResolutionMock:
             embedder = Embedder(model_dir=str(model_dir), device="auto")
 
         assert embedder._device == "cuda"
+
+    def test_auto_device_selects_mps_when_cuda_unavailable_mps_available(
+        self, tmp_path: Path, fake_st_module: MagicMock
+    ) -> None:
+        """MT-15b: device='auto', CUDA 불가 + MPS 가용 → mps 선택 (Apple Silicon)."""
+        model_dir = _make_model_dir(tmp_path)
+        fake_st_module.return_value = MagicMock()
+        fake_st_module.side_effect = None
+
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            patch("torch.backends.mps.is_available", return_value=True),
+            patch("torch.backends.mps.is_built", return_value=True),
+        ):
+            from vector_search.embedder import Embedder
+
+            embedder = Embedder(model_dir=str(model_dir), device="auto")
+
+        assert embedder._device == "mps"
 
     def test_cuda_device_raises_when_cuda_unavailable(
         self, tmp_path: Path, fake_st_module: MagicMock

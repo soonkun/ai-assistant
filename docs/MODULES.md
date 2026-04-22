@@ -463,3 +463,4 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 - 모든 `async def`는 취소(`asyncio.CancelledError`) 전파 허용. 자원 정리는 `try/finally`로.
 - 모든 네트워크 호출은 `127.0.0.1`/`localhost`/`OLLAMA_BASE_URL` 환경변수(사설 IP 검증됨)만 허용.
 - 새 의존성 추가 시 `pyproject.toml` 수정 + `scripts/bundle_deps.sh` 업데이트 필수.
+- **개발 환경**: Windows 10/11 · macOS 14+ (Apple Silicon) · Linux (x86-64/ARM) (CR-12, 2026-04-22). 배포 타깃은 Windows 전용 유지.
