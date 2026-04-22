@@ -18,6 +18,10 @@ build/
 *.onnx
 assets/models/
 
+# 오프라인 번들 산출물 (bundle_deps.sh가 생성, 각 빌드 머신에서 재생성)
+assets/wheels/
+assets/npm_cache/
+
 # 사내 문서 샘플 (PII 위험 — tests/fixtures/hwpx의 합성본만 저장소에 올린다)
 assets/hwpx_samples/
 
@@ -47,6 +51,7 @@ cache/
 
 # Claude Code 로컬 설정 (팀 공유 안 함)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Node (향후 UI 빌드 시)
 node_modules/

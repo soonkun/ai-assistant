@@ -10,6 +10,7 @@ REQUIREMENTS: §1.1 VAD + STT
 
 from __future__ import annotations
 
+import platform
 import wave
 from pathlib import Path
 
@@ -18,10 +19,17 @@ import pytest
 
 pytestmark = [pytest.mark.e2e, pytest.mark.e2e_model]
 
+_IS_WSL = "microsoft" in platform.uname().release.lower()
+_WSL_SKIP_REASON = (
+    "WSL 저사양 환경 비권장 (LPDDR4 16GB 랩탑 기준 ctranslate2 CUDA wheel · "
+    "torch/sympy 호환성 · Whisper 로드 시간 누적 이슈). "
+    "32GB 네이티브 Windows/Linux 또는 Apple Silicon에서 재검증."
+)
+
 _FIXTURES_AUDIO = Path(__file__).parent / "fixtures" / "audio"
 _WHISPER_PATHS = [
-    Path("assets/models/whisper-large-v3-int8"),
     Path("assets/models/whisper-medium-int8"),
+    Path("assets/models/whisper-large-v3-int8"),
 ]
 
 
@@ -32,7 +40,7 @@ def _find_whisper_model() -> Path | None:
     return None
 
 
-@pytest.mark.timeout(20)
+@pytest.mark.timeout(60)
 async def test_e2e_21_empty_asr() -> None:
     """무음 WAV → ASR 빈 문자열 또는 무음 관련 결과.
 
@@ -41,6 +49,9 @@ async def test_e2e_21_empty_asr() -> None:
     - 예외 없이 완료.
     - Gemma 호출 0회 (ASR 결과 검증 — 빈 결과면 chat() 호출 안 함).
     """
+    if _IS_WSL:
+        pytest.skip(reason=_WSL_SKIP_REASON)
+
     whisper_path = _find_whisper_model()
     if whisper_path is None:
         pytest.skip(
@@ -57,6 +68,7 @@ async def test_e2e_21_empty_asr() -> None:
         model_path=str(whisper_path),
         language="ko",
         compute_type="int8",
+        device="cpu",
     )
 
     # 무음 WAV float32 로드

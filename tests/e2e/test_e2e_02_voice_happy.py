@@ -14,6 +14,7 @@ REQUIREMENTS: §1.1 STT · §1.1 VAD · §1.1 TTS
 
 from __future__ import annotations
 
+import platform
 import wave
 from pathlib import Path
 
@@ -22,10 +23,17 @@ import pytest
 
 pytestmark = [pytest.mark.e2e, pytest.mark.e2e_model]
 
+_IS_WSL = "microsoft" in platform.uname().release.lower()
+_WSL_SKIP_REASON = (
+    "WSL 저사양 환경 비권장 (LPDDR4 16GB 랩탑 기준 ctranslate2 CUDA wheel · "
+    "torch/sympy 호환성 · Whisper 로드 시간 누적 이슈). "
+    "32GB 네이티브 Windows/Linux 또는 Apple Silicon에서 재검증."
+)
+
 _FIXTURES_AUDIO = Path(__file__).parent / "fixtures" / "audio"
 _WHISPER_PATHS = [
-    Path("assets/models/whisper-large-v3-int8"),
     Path("assets/models/whisper-medium-int8"),
+    Path("assets/models/whisper-large-v3-int8"),
 ]
 
 
@@ -61,6 +69,9 @@ async def test_e2e_02_voice_happy() -> None:
     - ASR 결과가 빈 문자열이 아님.
     - 예외 없이 완료.
     """
+    if _IS_WSL:
+        pytest.skip(reason=_WSL_SKIP_REASON)
+
     whisper_path = _find_whisper_model()
     if whisper_path is None:
         pytest.skip(
@@ -80,6 +91,7 @@ async def test_e2e_02_voice_happy() -> None:
         model_path=str(whisper_path),
         language="ko",
         compute_type="int8",
+        device="cpu",
     )
 
     audio = _load_wav_as_float32(greeting_wav)
