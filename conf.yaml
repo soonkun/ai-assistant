@@ -1,0 +1,95 @@
+system_config:
+  conf_version: "v1.0.0"
+  host: "127.0.0.1"
+  port: 12393
+  config_alts_dir: "characters"
+  enable_proxy: false
+  tool_prompts:
+    live2d_expression_prompt: "live2d_expression_prompt"
+    proactive_speak_prompt: "proactive_speak_prompt"
+
+character_config:
+  conf_name: "saessagi"
+  conf_uid: "saessagi-v1"
+  live2d_model_name: ""
+  persona_prompt: |
+    너는 새싹이야. 사내 AI 비서야.
+
+    ## 답변 규칙
+    - 일상 인사, 가벼운 질문: 1~2문장으로 짧고 친절하게 답변해.
+    - 문서 검색, 자료 조사, 복잡한 업무 요청: 상세하게 단계별로 설명해.
+    - 불필요한 서론/후기 금지. 핵심만 말해.
+    - 이모지 남발 금지. 필요한 경우만 1개.
+  avatar: "saessagi.png"
+  asr_config:
+    asr_model: "faster_whisper"
+    faster_whisper:
+      model_path: "large-v3-turbo"
+      download_root: "assets/models"
+      language: "ko"
+      compute_type: "int8"
+      device: "auto"
+      prompt: ""
+  tts_config:
+    tts_model: "melo_tts"
+    melo_tts:
+      speaker: "KR"
+      language: "KR"
+      device: "auto"
+      speed: 1.0
+  vad_config:
+    vad_model: "silero_vad"
+    silero_vad:
+      orig_sr: 16000
+      target_sr: 16000
+      prob_threshold: 0.4
+      db_threshold: 60
+      required_hits: 3
+      required_misses: 24
+      smoothing_window: 5
+  agent_config:
+    conversation_agent_choice: "basic_memory_agent"
+    agent_settings:
+      basic_memory_agent:
+        llm_provider: "ollama_llm"
+        use_mcpp: false
+        mcp_enabled_servers: []
+    llm_configs:
+      ollama_llm:
+        base_url: "http://127.0.0.1:11434"
+        model: "gemma4:e2b"
+        temperature: 0.7
+        keep_alive: 300
+  tts_preprocessor_config:
+    remove_special_char: true
+    ignore_brackets: true
+    ignore_parentheses: true
+    ignore_asterisks: true
+    ignore_angle_brackets: true
+    translator_config:
+      translate_audio: false
+      translate_provider: "deeplx"
+
+app:
+  profile: min
+  ollama:
+    base_url: "http://127.0.0.1:11434"
+    model: "gemma4:e2b"
+    keep_alive_seconds: 300
+    request_timeout_seconds: 120
+  paths:
+    data_dir: "data"
+    assets_dir: "assets"
+    vector_store_dir: "data/vector_store"
+    calendar_db_path: "data/calendar.db"
+    chat_history_dir: "data/chat_history"
+    log_dir: "data/logs"
+  proactive:
+    idle_threshold_min: 45
+    overwork_threshold_min: 120
+    active_gap_seconds: 60
+    cooldown_min: 30
+  morning_briefing_time: "09:00"
+  dnd_enabled: false
+  rag_min_score: 0.35
+  screenshot_continuous_interval_sec: 5
