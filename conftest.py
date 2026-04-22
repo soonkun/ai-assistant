@@ -5,6 +5,7 @@ tests/app/__init__.py가 pytest에 의해 'app' 패키지로 인식되는 문제
 sys.path를 먼저 설정하고 src/app을 올바른 'app' 패키지로 등록.
 """
 
+import importlib.util
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -30,11 +31,16 @@ if str(_UPSTREAM_ROOT) not in sys.path:
 # upstream의 선택적 의존성을 mock으로 등록 (테스트 환경에서 설치되지 않은 패키지들)
 def _make_mock_package(name: str) -> MagicMock:
     """서브모듈 접근이 가능한 mock 패키지 생성."""
+    from importlib.machinery import ModuleSpec
+
     mock = MagicMock()
     mock.__name__ = name
     mock.__package__ = name
     mock.__path__ = []  # 패키지로 인식되도록
-    mock.__spec__ = None
+    # __spec__=None이면 importlib.util.find_spec이 ValueError를 던진다.
+    # transformers._is_package_available 등이 find_spec으로 설치 여부만 체크할 때
+    # ValueError가 예외 전파되는 문제를 피하기 위해 최소 ModuleSpec을 부여한다.
+    mock.__spec__ = ModuleSpec(name, loader=None)
     return mock
 
 
@@ -61,9 +67,18 @@ _MOCK_PACKAGES = [
     "anthropic",
 ]
 for _pkg in _MOCK_PACKAGES:
-    if _pkg not in sys.modules:
-        _mock = _make_mock_package(_pkg)
-        sys.modules[_pkg] = _mock  # type: ignore[assignment]
+    if _pkg in sys.modules:
+        continue
+    # 실제 venv에 설치된 패키지는 mock으로 덮지 않는다.
+    # find_spec이 ValueError를 던지는 경우(sys.modules에 __spec__=None인 가짜가 있을 때)는
+    # except로 흡수하고 mock 경로로 진행.
+    try:
+        if importlib.util.find_spec(_pkg) is not None:
+            continue
+    except (ImportError, ValueError):
+        pass
+    _mock = _make_mock_package(_pkg)
+    sys.modules[_pkg] = _mock  # type: ignore[assignment]
 
 # tests/app/__init__.py가 pytest에 의해 'app' 패키지로 잘못 인식되는 것을 방지.
 # src/app을 올바른 'app' 모듈로 sys.modules에 미리 등록.
