@@ -64,3 +64,30 @@ LibreOffice는 M_03 스펙에서 제외한다. 의존성 1개 감소.
 ## 참조
 - `tests/fixtures/hwpx/` — 테스트 샘플 3종
 - `REQUIREMENTS.md §2.1` — HWP/HWPX 파싱 요구사항
+
+---
+
+## 네임스페이스 정정 (M_06 Builder 단계, 2026-04-23)
+
+위 "HWPX 파싱 전략 (확정)" 코드 블록의 네임스페이스
+`"hp": "urn:hancom:names:tc:opendocument:xmlns:paragraph:1.0"`는
+**합성 픽스처 기준으로 잘못된 값**이다.
+
+실제 한글과컴퓨터가 생성하는 HWPX 파일은 아래 두 URI 중 하나를 사용한다:
+
+- `http://www.hancom.co.kr/hwpml/2011/paragraph` (한글 2011 이후)
+- `http://www.hancom.co.kr/hwpml/2016/paragraph` (한글 2016 이후)
+
+따라서 M_06 `src/document_ingest/parsers/hwpx.py`는 두 네임스페이스를 모두 시도하는 방식으로 구현되었다:
+
+```python
+HWPX_NS = {
+    "hp":   "http://www.hancom.co.kr/hwpml/2011/paragraph",
+    "hp10": "http://www.hancom.co.kr/hwpml/2016/paragraph",
+}
+# 2011 시도 → 0건이면 2016 fallback
+paragraphs = root.findall(".//hp:p", HWPX_NS) or root.findall(".//hp10:p", HWPX_NS)
+```
+
+실제 사내 파일 `data/Documents/업무편람/` 검증 결과 위 두 네임스페이스가 커버됨 확인.
+`docs/RISKS.md` R-03(HWPX 네임스페이스) → MITIGATING 전환.

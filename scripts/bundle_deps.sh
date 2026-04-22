@@ -126,6 +126,19 @@ huggingface-cli download BAAI/bge-m3 \
     --local-dir-use-symlinks False
 
 echo ""
+echo "=== [bundle_deps.sh] M_06 DocumentIngest 의존성 ==="
+echo "  PDF/DOCX/PPTX/MD 파서 + XXE 방어"
+
+# M_06 DocumentIngest — 문서 파서 핵심 의존성
+pip download \
+    "pypdfium2>=4.30,<5" \
+    "python-docx>=1.1,<2" \
+    "python-pptx>=1.0,<2" \
+    "markdown-it-py>=3.0,<4" \
+    "defusedxml>=0.7,<1" \
+    --dest "${WHEELS_DIR}"
+
+echo ""
 echo "=== [bundle_deps.sh] M_10 IdleMonitor 의존성 ==="
 echo "  pynput: 전역 키보드·마우스 훅 (Primary 백엔드)"
 echo "  pywin32: Windows GetLastInputInfo 폴백 (Windows 전용 wheel)"

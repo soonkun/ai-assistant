@@ -37,6 +37,12 @@ dependencies = [
     "lancedb>=0.10,<1",
     "pyarrow>=15.0,<19",
     "numpy>=1.26,<3",
+    # M_06 DocumentIngest: PDF/DOCX/PPTX/HWPX/TXT/MD 파서 + 청킹 + XXE 방어
+    "pypdfium2>=4.30,<5",         # PDF 파싱 (Apache-2.0, PDFium 기반)
+    "python-docx>=1.1,<2",        # DOCX 파싱 (MIT)
+    "python-pptx>=1.0,<2",        # PPTX 파싱 (MIT)
+    "markdown-it-py>=3.0,<4",     # MD 파싱 (MIT)
+    "defusedxml>=0.7,<1",         # XXE 방어 (Python-2.0)
     # M_10 IdleMonitor: 전역 키보드·마우스 훅 + Windows GetLastInputInfo 폴백
     "pynput>=1.7,<2",
     "pywin32>=306; sys_platform == 'win32'",
@@ -136,6 +142,21 @@ module = "win32con.*"
 ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "apscheduler.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "pypdfium2.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "docx.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "pptx.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "markdown_it.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = "defusedxml.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

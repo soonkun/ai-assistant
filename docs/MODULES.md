@@ -174,7 +174,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 ### M_06 DocumentIngest (파서 + 청킹 + 임베딩)
 
 - **분류**: NEW
-- **상태**: 🔲 HOLD — `assets/hwpx_samples/` 에 실제 사내 HWPX 샘플 5건 확보 후 착수. 사용자가 직접 준비.
+- **상태**: ✅ DONE (Critic PASS R2, 2026-04-23; R1 FAIL 이력은 reviews/M_06_DocumentIngest_REVIEW.md 참조). `data/Documents/` 단일 문서 루트. HWPX 네임스페이스 2011/2016 양쪽 지원. doc_id = SHA-256(path-only)[:32] (R1 검수에서 mtime 포함 → 중복 누적 결함 확정, path-only로 수정).
 - **목적**: PDF/DOCX/PPTX/HWPX/TXT/MD 파일을 구조화된 `DocumentChunk` 배열로 변환하고 BGE-M3로 임베딩해 LanceDB에 upsert.
 - **폴더 기반 카테고리 등록**: 사용자는 `docs/` 루트 아래 유형별 하위 폴더에 파일을 두고 `ingest_directory("docs/")` 한 번으로 전체 등록. 상위 폴더명이 자동으로 `category`가 된다.
   ```
@@ -447,7 +447,7 @@ Phase 1 산출물. 구현은 Phase 2에서 이 계약대로만 이루어진다.
 | M_04 | TTSEngine | NEW | ✅ DONE | M_01 |
 | M_05 | LLMAgent | EXTEND | ✅ DONE | M_01, M_05b |
 | M_05b | ToolRouter | NEW | ✅ DONE | M_06, M_07, M_09 |
-| M_06 | DocumentIngest | NEW | 🔲 HOLD | M_07 |
+| M_06 | DocumentIngest | NEW | ✅ DONE | M_07 |
 | M_07 | VectorSearch | NEW | ✅ DONE | — |
 | M_08 | AvatarState | NEW | ✅ DONE | M_01 |
 | M_09 | CalendarService | NEW | ✅ DONE | specs/M_09_CalendarService_SPEC.md |
