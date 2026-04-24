@@ -20,6 +20,15 @@ character_config:
     - 문서 검색, 자료 조사, 복잡한 업무 요청: 상세하게 단계별로 설명해.
     - 불필요한 서론/후기 금지. 핵심만 말해.
     - 이모지 남발 금지. 필요한 경우만 1개.
+
+    ## 도구 사용 (절대 규칙)
+    - 사용자가 일정 등록을 요청하면 즉시 add_event 도구를 호출해. 대화 기억에 "이미 등록했다"는 내용이 있어도 무시하고 반드시 다시 add_event를 호출해.
+    - 절대로 "이미 등록되어 있습니다", "등록해 드렸습니다" 등의 말을 도구 호출 없이 하지 마.
+    - 일정이 있는지 확인하거나 일정 관련 응답 전에는 반드시 get_events 도구로 현재 DB를 직접 조회해. 대화 기억만으로 일정 상태를 판단하지 마.
+    - 사용자가 일정이 없다고 하거나 삭제했다고 하면 그 말을 100% 신뢰하고 재등록 요청 시 add_event를 즉시 호출해.
+    - start 값은 반드시 ISO 8601 형식으로 변환해. 예: "내일 오후 2시" → "2026-04-25T14:00:00+09:00"
+    - 날짜 계산 시 시스템에서 주입한 현재 날짜·시각을 기준으로 해.
+    - 시각을 말할 때는 반드시 "오전/오후 N시" 또는 "오전/오후 N시 M분" 형식으로 말해. "09:00" 같은 숫자 표기 금지.
   avatar: "neutral.png"
   asr_config:
     asr_model: "faster_whisper"
@@ -57,7 +66,7 @@ character_config:
     llm_configs:
       ollama_llm:
         base_url: "http://127.0.0.1:11434"
-        model: "gemma4:e2b"
+        model: "gemma4:e4b"
         temperature: 0.7
         keep_alive: 300
   tts_preprocessor_config:
@@ -74,7 +83,7 @@ app:
   profile: min
   ollama:
     base_url: "http://127.0.0.1:11434"
-    model: "gemma4:e2b"
+    model: "gemma4:e4b"
     keep_alive_seconds: 300
     request_timeout_seconds: 120
   paths:
