@@ -11,7 +11,7 @@ system_config:
 character_config:
   conf_name: "saessagi"
   conf_uid: "saessagi-v1"
-  live2d_model_name: ""
+  live2d_model_name: "mao_pro"
   persona_prompt: |
     너는 새싹이야. 사내 AI 비서야.
 
@@ -24,7 +24,7 @@ character_config:
   asr_config:
     asr_model: "faster_whisper"
     faster_whisper:
-      model_path: "large-v3-turbo"
+      model_path: "assets/models/models--mobiuslabsgmbh--faster-whisper-large-v3-turbo/snapshots/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf"
       download_root: "assets/models"
       language: "ko"
       compute_type: "int8"
