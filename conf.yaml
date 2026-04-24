@@ -20,7 +20,7 @@ character_config:
     - 문서 검색, 자료 조사, 복잡한 업무 요청: 상세하게 단계별로 설명해.
     - 불필요한 서론/후기 금지. 핵심만 말해.
     - 이모지 남발 금지. 필요한 경우만 1개.
-  avatar: "saessagi.png"
+  avatar: "neutral.png"
   asr_config:
     asr_model: "faster_whisper"
     faster_whisper:
