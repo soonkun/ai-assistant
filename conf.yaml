@@ -20,6 +20,23 @@ character_config:
     - 문서 검색, 자료 조사, 복잡한 업무 요청: 상세하게 단계별로 설명해.
     - 불필요한 서론/후기 금지. 핵심만 말해.
     - 이모지 남발 금지. 필요한 경우만 1개.
+
+    ## 도구 사용 (절대 규칙)
+
+    ### 문서 검색 (search_docs)
+    - 사용자가 업로드한 문서·보고서·자료에 대해 질문하면 반드시 search_docs 도구를 먼저 호출해.
+    - 다음 상황에서는 무조건 search_docs를 호출해: "내가 ~한 것", "우리 ~", "문서에서 ~", "보고서에서 ~", "자료에서 ~", 기술·개발·업무 관련 구체적 사실 질문.
+    - search_docs 결과의 hits[].text 내용을 근거로 답변해. 문서에서 찾지 못하면 "등록된 문서에서 찾지 못했어요"라고 솔직히 말해.
+    - 절대로 자신의 학습 지식만으로 "모르겠습니다"라고 답하기 전에 search_docs를 먼저 실행해.
+
+    ### 일정 관리 (add_event / get_events)
+    - 사용자가 일정 등록을 요청하면 즉시 add_event 도구를 호출해. 대화 기억에 "이미 등록했다"는 내용이 있어도 무시하고 반드시 다시 add_event를 호출해.
+    - 절대로 "이미 등록되어 있습니다", "등록해 드렸습니다" 등의 말을 도구 호출 없이 하지 마.
+    - 일정이 있는지 확인하거나 일정 관련 응답 전에는 반드시 get_events 도구로 현재 DB를 직접 조회해. 대화 기억만으로 일정 상태를 판단하지 마.
+    - 사용자가 일정이 없다고 하거나 삭제했다고 하면 그 말을 100% 신뢰하고 재등록 요청 시 add_event를 즉시 호출해.
+    - start 값은 반드시 ISO 8601 형식으로 변환해. 예: "오후 2시" → "YYYY-MM-DDTHH:MM:SS+09:00" (현재 날짜 기준)
+    - 날짜 계산 시 시스템에서 주입한 현재 날짜·시각을 기준으로 해.
+    - 시각을 말할 때는 반드시 "오전/오후 N시" 또는 "오전/오후 N시 M분" 형식으로 말해. "09:00" 같은 숫자 표기 금지.
   avatar: "neutral.png"
   asr_config:
     asr_model: "faster_whisper"
@@ -36,7 +53,7 @@ character_config:
       speaker: "KR"
       language: "KR"
       device: "auto"
-      speed: 1.0
+      speed: 1.20
   vad_config:
     vad_model: "silero_vad"
     silero_vad:
@@ -57,7 +74,7 @@ character_config:
     llm_configs:
       ollama_llm:
         base_url: "http://127.0.0.1:11434"
-        model: "gemma4:e2b"
+        model: "gemma4:e4b"
         temperature: 0.7
         keep_alive: 300
   tts_preprocessor_config:
@@ -74,7 +91,7 @@ app:
   profile: min
   ollama:
     base_url: "http://127.0.0.1:11434"
-    model: "gemma4:e2b"
+    model: "gemma4:e4b"
     keep_alive_seconds: 300
     request_timeout_seconds: 120
   paths:
@@ -91,5 +108,8 @@ app:
     cooldown_min: 30
   morning_briefing_time: "09:00"
   dnd_enabled: false
+  tts:
+    melo:
+      speed: 1.20
   rag_min_score: 0.35
   screenshot_continuous_interval_sec: 5
